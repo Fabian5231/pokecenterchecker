@@ -1,0 +1,9 @@
+# Shell-Skripte und Unit-Files muessen LF behalten (fuer Linux/VPS).
+*.sh    text eol=lf
+*.service text eol=lf
+run.sh  text eol=lf
+setup_vps.sh text eol=lf
+
+# Windows-Batch mit CRLF
+*.bat   text eol=crlf
+*.ps1   text eol=crlf

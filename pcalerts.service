@@ -1,0 +1,31 @@
+# systemd-Dienst fuer PCAlerts (Linux-VPS, headless mit xvfb).
+#
+# Installation:
+#   1. Projekt nach /opt/pcalerts kopieren (oder Pfade unten anpassen).
+#   2. sudo cp pcalerts.service /etc/systemd/system/pcalerts.service
+#   3. Pfade/User unten pruefen (WorkingDirectory, ExecStart, User).
+#   4. sudo systemctl daemon-reload
+#      sudo systemctl enable --now pcalerts
+#   5. Status/Logs:  systemctl status pcalerts   |   journalctl -u pcalerts -f
+#
+# Hinweis: xvfb-run startet Chromium auf einem virtuellen, unsichtbaren
+# Bildschirm - es wird KEINE Grafikoberflaeche benoetigt.
+
+[Unit]
+Description=PCAlerts - Pokemon Center Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/pcalerts
+ExecStart=/usr/bin/xvfb-run -a /opt/pcalerts/.venv/bin/python web.py
+Restart=on-failure
+RestartSec=15
+Environment=PYTHONUNBUFFERED=1
+# Empfohlen: eigenen Benutzer verwenden (nicht root). Beispiel:
+#   sudo useradd -r -m -d /opt/pcalerts pcalerts && sudo chown -R pcalerts /opt/pcalerts
+User=pcalerts
+
+[Install]
+WantedBy=multi-user.target

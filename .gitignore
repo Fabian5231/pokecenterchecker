@@ -1,0 +1,13 @@
+.venv/
+.pw-profile/
+.pw-test/
+.pw-diag/
+.env
+pcalerts.db
+*.log
+__pycache__/
+*.pyc
+probe*.py
+probe*.html
+probe*.json
+extract_test.py

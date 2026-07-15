@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PCAlerts – Pokémon Center Monitor</title>
+<style>
+  :root{
+    --bg:#0f1420; --card:#1a2130; --line:#2a3346; --fg:#e7ecf3; --muted:#94a3b8;
+    --accent:#ffcb05; --blue:#3b82f6; --green:#22c55e; --red:#ef4444; --amber:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
+  header{background:linear-gradient(90deg,#1e2740,#151b2b);border-bottom:1px solid var(--line);
+    padding:18px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:19px;margin:0;font-weight:700}
+  header .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);
+    display:grid;place-items:center;color:#1a2130;font-weight:900}
+  .wrap{max-width:1100px;margin:0 auto;padding:22px 24px 60px}
+  .row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;flex:1;min-width:210px}
+  .card h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .big{font-size:22px;font-weight:700}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:13px;font-weight:600}
+  .dot{width:9px;height:9px;border-radius:50%}
+  .ok{background:rgba(34,197,94,.15);color:var(--green)} .ok .dot{background:var(--green)}
+  .blocked{background:rgba(245,158,11,.15);color:var(--amber)} .blocked .dot{background:var(--amber)}
+  .error{background:rgba(239,68,68,.15);color:var(--red)} .error .dot{background:var(--red)}
+  .idle{background:rgba(148,163,184,.15);color:var(--muted)} .idle .dot{background:var(--muted)}
+  h2{font-size:15px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  tr:last-child td{border-bottom:none}
+  .tag{font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
+  .in{background:rgba(34,197,94,.16);color:var(--green)}
+  .out{background:rgba(148,163,184,.14);color:var(--muted)}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+  .muted{color:var(--muted)}
+  button{background:var(--accent);color:#1a2130;border:0;border-radius:9px;padding:9px 16px;
+    font-weight:700;cursor:pointer;font-size:14px}
+  button:disabled{opacity:.5;cursor:wait}
+  .evt-new{color:var(--accent);font-weight:700}
+  .evt-restock{color:var(--green);font-weight:700}
+  .small{font-size:12px}
+  .tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
+  .flex-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  code{background:#0b1020;padding:2px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">PC</div>
+  <h1>PCAlerts – Pokémon Center Monitor</h1>
+  <span id="statusPill" class="pill idle" style="margin-left:auto"><span class="dot"></span><span id="statusText">…</span></span>
+</header>
+
+<div class="wrap">
+  <div class="row">
+    <div class="card">
+      <h3>Letzte Prüfung</h3>
+      <div class="big" id="lastCheck">–</div>
+      <div class="small muted" id="lastNote"></div>
+    </div>
+    <div class="card">
+      <h3>Intervall</h3>
+      <div class="big" id="interval">–</div>
+      <div class="small muted">automatisch im Hintergrund</div>
+    </div>
+    <div class="card">
+      <h3>Artikel gesamt / verfügbar</h3>
+      <div class="big"><span id="numTotal">0</span> / <span id="numAvail" style="color:var(--green)">0</span></div>
+      <div class="small muted">in der überwachten Kategorie</div>
+    </div>
+    <div class="card">
+      <h3>Telegram</h3>
+      <div class="big" id="tg">–</div>
+      <div class="small muted" id="notifyOn"></div>
+    </div>
+  </div>
+
+  <div class="flex-between">
+    <div class="small muted">Überwacht: <a id="pcurl" href="#" target="_blank">Kategorie-Seite</a></div>
+    <button id="checkBtn" onclick="checkNow()">Jetzt prüfen</button>
+  </div>
+
+  <h2>🛒 Aktuelle Artikel</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Status</th><th>Artikel</th><th>Preis</th><th>Zuerst gesehen</th><th></th></tr></thead>
+      <tbody id="products"><tr><td colspan="5" class="muted">Lade…</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>🔔 Erkannte Ereignisse</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Zeit</th><th>Ereignis</th><th>Artikel</th><th>Preis</th></tr></thead>
+      <tbody id="events"><tr><td colspan="4" class="muted">Noch keine Ereignisse.</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>🕑 Prüf-Historie</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Zeit</th><th>Ergebnis</th><th>Artikel</th><th>Hinweis</th></tr></thead>
+      <tbody id="checks"><tr><td colspan="4" class="muted">Lade…</td></tr></tbody>
+    </table>
+  </div>
+  <p class="small muted" style="margin-top:24px">Aktualisiert sich automatisch alle 15 Sekunden.</p>
+</div>
+
+<script>
+const STATUS_LABEL = {ok:"Läuft – zuletzt OK", blocked:"Bot-Schutz blockiert", error:"Fehler", gestartet:"Startet…", idle:"Bereit"};
+function statusClass(s){ return ({ok:"ok",blocked:"blocked",error:"error"})[s] || "idle"; }
+
+function esc(s){ return (s??"").toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function refresh(){
+  let s;
+  try { s = await (await fetch('/api/state')).json(); } catch(e){ return; }
+
+  const pill = document.getElementById('statusPill');
+  pill.className = 'pill ' + statusClass(s.status);
+  document.getElementById('statusText').textContent = STATUS_LABEL[s.status] || s.status;
+
+  document.getElementById('lastCheck').textContent = s.last_check || '–';
+  document.getElementById('lastNote').textContent = s.last_check_note || (s.last_error || '');
+  document.getElementById('interval').textContent = 'alle ' + s.interval + ' s';
+  document.getElementById('tg').textContent = s.telegram ? 'aktiv ✓' : 'nicht konfiguriert';
+  document.getElementById('tg').style.color = s.telegram ? 'var(--green)' : 'var(--muted)';
+  document.getElementById('notifyOn').textContent = 'bei: ' + (s.notify_on||[]).join(', ');
+  document.getElementById('pcurl').href = s.url;
+
+  const avail = s.products.filter(p=>p.available).length;
+  document.getElementById('numTotal').textContent = s.products.length;
+  document.getElementById('numAvail').textContent = avail;
+
+  document.getElementById('products').innerHTML = s.products.length ? s.products.map(p=>`
+    <tr>
+      <td><span class="tag ${p.available?'in':'out'}">${p.available?'VERFÜGBAR':'ausverkauft'}</span></td>
+      <td>${esc(p.name)}<div class="small muted">${esc(p.id)}</div></td>
+      <td>${esc(p.price||'–')}</td>
+      <td class="small muted">${esc(p.first_seen_fmt)}</td>
+      <td><a href="${esc(p.url)}" target="_blank">öffnen ›</a></td>
+    </tr>`).join('') : '<tr><td colspan="5" class="muted">Noch keine Daten.</td></tr>';
+
+  document.getElementById('events').innerHTML = s.events.length ? s.events.map(e=>`
+    <tr>
+      <td class="small muted">${esc(e.ts_fmt)}</td>
+      <td class="${e.type==='new'?'evt-new':'evt-restock'}">${e.type==='new'?'🆕 Neu gelistet':'✅ Wieder verfügbar'}</td>
+      <td>${esc(e.name)}<div class="small muted">${esc(e.product_id)}</div></td>
+      <td>${esc(e.price||'–')}</td>
+    </tr>`).join('') : '<tr><td colspan="4" class="muted">Noch keine Ereignisse.</td></tr>';
+
+  document.getElementById('checks').innerHTML = s.checks.map(c=>`
+    <tr>
+      <td class="small muted">${esc(c.ts_fmt)}</td>
+      <td><span class="pill ${statusClass(c.status)}" style="font-size:11px;padding:2px 8px"><span class="dot"></span>${esc(c.status)}</span></td>
+      <td class="small">${c.num_products} (${c.num_available} verf.)</td>
+      <td class="small muted">${esc(c.note||'')}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="muted">Noch keine Prüfungen.</td></tr>';
+}
+
+async function checkNow(){
+  const btn = document.getElementById('checkBtn');
+  btn.disabled = true; btn.textContent = 'Prüfe…';
+  try { await fetch('/api/check-now', {method:'POST'}); } catch(e){}
+  await refresh();
+  btn.disabled = false; btn.textContent = 'Jetzt prüfen';
+}
+
+refresh();
+setInterval(refresh, 15000);
+</script>
+</body>
+</html>
