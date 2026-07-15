@@ -1,7 +1,7 @@
 """Flask-Weboberflaeche + Start der Hintergrund-Ueberwachung."""
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, send_from_directory
 
 import config
 import db
@@ -53,6 +53,12 @@ def _state() -> dict:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(app.static_folder, "favicon.ico",
+                               mimetype="image/x-icon")
 
 
 @app.route("/api/state")
