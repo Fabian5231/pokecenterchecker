@@ -101,12 +101,19 @@ def recent_events(limit: int = 50) -> list:
     return [dict(r) for r in rows]
 
 
-def recent_checks(limit: int = 30) -> list:
+def recent_checks(limit: int = 30, offset: int = 0) -> list:
     with _lock, _conn() as c:
         rows = c.execute(
-            "SELECT * FROM checks ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT * FROM checks ORDER BY id DESC LIMIT ? OFFSET ?",
+            (limit, offset),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def count_checks() -> int:
+    with _lock, _conn() as c:
+        row = c.execute("SELECT COUNT(*) AS n FROM checks").fetchone()
+    return row["n"]
 
 
 def current_products() -> list:

@@ -47,6 +47,12 @@
   .tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
   .flex-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
   code{background:#0b1020;padding:2px 6px;border-radius:5px;font-size:12px}
+  select{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;
+    padding:5px 8px;font-size:13px;margin-left:6px;cursor:pointer}
+  .pager{display:flex;align-items:center;gap:12px}
+  .pgbtn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;
+    padding:7px 12px;font-size:13px;font-weight:600}
+  .pgbtn:disabled{opacity:.4;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -101,12 +107,29 @@
     </table>
   </div>
 
-  <h2>🕑 Prüf-Historie</h2>
+  <div class="flex-between" style="margin:26px 0 12px">
+    <h2 style="margin:0">🕑 Prüf-Historie</h2>
+    <label class="small muted">Pro Seite
+      <select id="perPage">
+        <option value="20">20</option>
+        <option value="30">30</option>
+        <option value="50">50</option>
+      </select>
+    </label>
+  </div>
   <div class="tablewrap">
     <table>
       <thead><tr><th>Zeit</th><th>Ergebnis</th><th>Artikel</th><th>Hinweis</th></tr></thead>
       <tbody id="checks"><tr><td colspan="4" class="muted">Lade…</td></tr></tbody>
     </table>
+  </div>
+  <div class="flex-between" style="margin-top:12px">
+    <div class="small muted" id="checksInfo"></div>
+    <div class="pager">
+      <button class="pgbtn" id="prevPage" onclick="changePage(-1)">‹ Zurück</button>
+      <span class="small muted" id="pageLabel">–</span>
+      <button class="pgbtn" id="nextPage" onclick="changePage(1)">Weiter ›</button>
+    </div>
   </div>
   <p class="small muted" style="margin-top:24px">Aktualisiert sich automatisch alle 15 Sekunden.</p>
 </div>
@@ -153,26 +176,63 @@ async function refresh(){
       <td>${esc(e.name)}<div class="small muted">${esc(e.product_id)}</div></td>
       <td>${esc(e.price||'–')}</td>
     </tr>`).join('') : '<tr><td colspan="4" class="muted">Noch keine Ereignisse.</td></tr>';
+}
 
-  document.getElementById('checks').innerHTML = s.checks.map(c=>`
+let checksPage = 1;
+let checksPerPage = 20;
+let checksTotalPages = 1;
+
+async function refreshChecks(){
+  let d;
+  try {
+    d = await (await fetch(`/api/checks?page=${checksPage}&per_page=${checksPerPage}`)).json();
+  } catch(e){ return; }
+
+  checksPage = d.page;
+  checksPerPage = d.per_page;
+  checksTotalPages = d.total_pages;
+
+  document.getElementById('checks').innerHTML = d.checks.length ? d.checks.map(c=>`
     <tr>
       <td class="small muted">${esc(c.ts_fmt)}</td>
       <td><span class="pill ${statusClass(c.status)}" style="font-size:11px;padding:2px 8px"><span class="dot"></span>${esc(c.status)}</span></td>
       <td class="small">${c.num_products} (${c.num_available} verf.)</td>
       <td class="small muted">${esc(c.note||'')}</td>
-    </tr>`).join('') || '<tr><td colspan="4" class="muted">Noch keine Prüfungen.</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="4" class="muted">Noch keine Prüfungen.</td></tr>';
+
+  const from = d.total ? (d.page-1)*d.per_page + 1 : 0;
+  const to = Math.min(d.page*d.per_page, d.total);
+  document.getElementById('checksInfo').textContent =
+    d.total ? `${from}–${to} von ${d.total} Läufen` : 'Noch keine Läufe';
+  document.getElementById('pageLabel').textContent = `Seite ${d.page} / ${d.total_pages}`;
+  document.getElementById('prevPage').disabled = d.page <= 1;
+  document.getElementById('nextPage').disabled = d.page >= d.total_pages;
 }
+
+function changePage(delta){
+  const next = checksPage + delta;
+  if (next < 1 || next > checksTotalPages) return;
+  checksPage = next;
+  refreshChecks();
+}
+
+document.getElementById('perPage').addEventListener('change', e=>{
+  checksPerPage = parseInt(e.target.value, 10);
+  checksPage = 1;
+  refreshChecks();
+});
 
 async function checkNow(){
   const btn = document.getElementById('checkBtn');
   btn.disabled = true; btn.textContent = 'Prüfe…';
   try { await fetch('/api/check-now', {method:'POST'}); } catch(e){}
-  await refresh();
+  await Promise.all([refresh(), refreshChecks()]);
   btn.disabled = false; btn.textContent = 'Jetzt prüfen';
 }
 
 refresh();
-setInterval(refresh, 15000);
+refreshChecks();
+setInterval(()=>{ refresh(); refreshChecks(); }, 15000);
 </script>
 </body>
 </html>

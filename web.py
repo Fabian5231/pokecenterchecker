@@ -1,7 +1,7 @@
 """Flask-Weboberflaeche + Start der Hintergrund-Ueberwachung."""
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, render_template, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 import config
 import db
@@ -44,9 +44,28 @@ def _state() -> dict:
         "events": [
             {**e, "ts_fmt": _fmt(e["ts"])} for e in db.recent_events(40)
         ],
+    }
+
+
+PER_PAGE_OPTIONS = (20, 30, 50)
+
+
+def _checks_page(page: int, per_page: int) -> dict:
+    if per_page not in PER_PAGE_OPTIONS:
+        per_page = PER_PAGE_OPTIONS[0]
+    total = db.count_checks()
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    offset = (page - 1) * per_page
+    return {
         "checks": [
-            {**c, "ts_fmt": _fmt(c["ts"])} for c in db.recent_checks(20)
+            {**c, "ts_fmt": _fmt(c["ts"])}
+            for c in db.recent_checks(per_page, offset)
         ],
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
     }
 
 
@@ -64,6 +83,19 @@ def favicon():
 @app.route("/api/state")
 def api_state():
     return jsonify(_state())
+
+
+@app.route("/api/checks")
+def api_checks():
+    try:
+        page = int(request.args.get("page", 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per_page = int(request.args.get("per_page", PER_PAGE_OPTIONS[0]))
+    except (TypeError, ValueError):
+        per_page = PER_PAGE_OPTIONS[0]
+    return jsonify(_checks_page(page, per_page))
 
 
 @app.route("/api/check-now", methods=["POST"])
