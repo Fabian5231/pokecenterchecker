@@ -89,13 +89,15 @@ journalctl -u pcalerts -f          # Live-Logs
 ```
 
 **4. Dashboard vom eigenen PC aus erreichen** (der VPS hat keinen Browser):
-- **Sicher (empfohlen):** SSH-Tunnel vom eigenen Rechner:
+- **Per Domain + HTTPS (empfohlen, wie die anderen Dienste):** nginx-Reverse-Proxy
+  + Certbot. Komplette Schritt-für-Schritt-Anleitung inkl. fertiger nginx-Konfig:
+  **[`deploy/DEPLOY.md`](deploy/DEPLOY.md)** → Ergebnis: `https://pkmn-center.fabian-social.dev`
+- **Schnell zum Testen:** SSH-Tunnel vom eigenen Rechner:
   ```bash
   ssh -L 8080:127.0.0.1:8080 benutzer@dein-vps
   ```
   Dann lokal `http://127.0.0.1:8080` öffnen.
-- **Oder** in `.env` `WEB_HOST=0.0.0.0` setzen und Port 8080 in der Firewall
-  freigeben (dann ist das Dashboard offen im Netz erreichbar – nur mit Bedacht).
+- Bei Proxy-Betrieb `WEB_HOST=127.0.0.1` lassen (nur nginx greift davor).
 
 > ⚠️ **Wichtig zu VPS-IP-Adressen:** DataDome stuft **Rechenzentrums-IPs**
 > (typische VPS-Adressen) strenger ein als normale Privat-Anschlüsse. Es kann

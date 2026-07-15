@@ -11,3 +11,4 @@ probe*.py
 probe*.html
 probe*.json
 extract_test.py
+image.png
