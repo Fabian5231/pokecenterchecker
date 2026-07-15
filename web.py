@@ -1,8 +1,7 @@
 """Flask-Weboberflaeche + Start der Hintergrund-Ueberwachung."""
-import threading
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template
 
 import config
 import db
@@ -10,7 +9,6 @@ from monitor import Monitor
 
 app = Flask(__name__)
 monitor = Monitor()
-_check_lock = threading.Lock()
 
 
 def _fmt(ts: str) -> str:
@@ -64,13 +62,10 @@ def api_state():
 
 @app.route("/api/check-now", methods=["POST"])
 def api_check_now():
-    if not _check_lock.acquire(blocking=False):
-        return jsonify({"ok": False, "msg": "Es laeuft bereits eine Pruefung."}), 409
-    try:
-        res = monitor.check_once()
-        return jsonify({"ok": True, "status": res["status"], "note": res["note"]})
-    finally:
-        _check_lock.release()
+    # WICHTIG: nicht selbst scrapen (anderer Thread!), sondern den
+    # Monitor-Thread um eine sofortige Pruefung bitten.
+    res = monitor.request_check()
+    return jsonify({"ok": True, "status": res["status"], "note": res.get("note", "")})
 
 
 def main():
