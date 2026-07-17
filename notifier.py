@@ -50,6 +50,30 @@ def notify_event(ev_type: str, p: dict) -> bool:
     return send_message(text)
 
 
+def notify_queue(note: str = "") -> bool:
+    """Drop-Alarm: Warteschlange/Captcha ist der Pruefseite vorgeschaltet."""
+    text = (
+        "🚨 <b>Drop-Alarm!</b>\n\n"
+        "Pokémon Center hat eine Warteschlange/Captcha vorgeschaltet - "
+        "das passiert normalerweise nur bei einem Drop.\n"
+    )
+    if note:
+        text += f"\n<i>{html.escape(note)}</i>\n"
+    text += (
+        f'\n<a href="{html.escape(config.PC_URL)}">Jetzt selbst in die Warteschlange »</a>\n'
+        "⚠️ Der Monitor kommt gerade nicht auf die Seite - am besten sofort "
+        "selbst im Browser einreihen!"
+    )
+    return send_message(text)
+
+
+def notify_queue_cleared() -> bool:
+    return send_message(
+        "✅ <b>Entwarnung:</b> Die Warteschlange/Captcha ist weg, "
+        "die Seite ist wieder normal erreichbar. Der Monitor prüft weiter."
+    )
+
+
 def send_test() -> bool:
     return send_message(
         "🔔 <b>PCAlerts</b> ist eingerichtet.\n"

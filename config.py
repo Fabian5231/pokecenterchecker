@@ -32,6 +32,11 @@ NOTIFY_ON = {
     if x.strip()
 }
 
+# Drop-Alarm: benachrichtigen, wenn Warteschlange/Captcha erkannt wird.
+QUEUE_ALERT = _bool("QUEUE_ALERT", True)
+# Waehrend eine Queue ansteht, fruehestens alle X Minuten erneut alarmieren.
+QUEUE_ALERT_COOLDOWN_MINUTES = int(os.getenv("QUEUE_ALERT_COOLDOWN_MINUTES", "30"))
+
 WEB_HOST = os.getenv("WEB_HOST", "127.0.0.1")
 WEB_PORT = int(os.getenv("WEB_PORT", "8080"))
 

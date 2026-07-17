@@ -43,7 +43,7 @@ def init():
             CREATE TABLE IF NOT EXISTS checks (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 ts            TEXT,
-                status        TEXT,    -- 'ok' | 'blocked' | 'error'
+                status        TEXT,    -- 'ok' | 'queue' | 'blocked' | 'error'
                 num_products  INTEGER,
                 num_available INTEGER,
                 note          TEXT

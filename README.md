@@ -146,6 +146,8 @@ journalctl -u pcalerts -f          # Live-Logs
 | `TELEGRAM_BOT_TOKEN` | Bot-Token von BotFather | – |
 | `TELEGRAM_CHAT_ID` | Deine Chat-ID | – |
 | `NOTIFY_ON` | `new` (neu gelistet), `restock` (wieder verfügbar) | `new,restock` |
+| `QUEUE_ALERT` | Drop-Alarm, wenn Warteschlange/Captcha erkannt wird | `true` |
+| `QUEUE_ALERT_COOLDOWN_MINUTES` | Frühestens alle X Minuten erneut alarmieren, solange die Queue steht | `30` |
 | `WEB_HOST` / `WEB_PORT` | Adresse der Weboberfläche | `127.0.0.1` / `8080` |
 
 **Andere Kategorie überwachen:** Einfach die gewünschte Kategorie-Seite auf

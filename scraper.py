@@ -20,6 +20,28 @@ HOME = "https://www.pokemoncenter.com/de-de"
 _BLOCK_MARKERS = ("_incapsula_resource", "incident id",
                   "geo.captcha-delivery.com")
 
+# Drop-Erkennung: Bei einem Drop schaltet Pokemon Center eine Warteschlange
+# (Queue-it) und/oder ein Captcha (DataDome) vor die Seite. Diese Merkmale
+# werden NUR geprueft, wenn keine Produkte gefunden wurden - auf einer
+# normalen Produktseite koennen sie nicht falsch anschlagen.
+_QUEUE_MARKERS = ("queue-it", "queueit", "waiting room", "warteschlange",
+                  "waitingroom", "softblock")
+_CAPTCHA_MARKERS = ("geo.captcha-delivery.com", "captcha-delivery")
+
+
+def _detect_shield(html: str, page_url: str) -> str | None:
+    """Warteschlangen- oder Captcha-Seite erkennen (nur bei 0 Produkten rufen).
+
+    Rueckgabe: "queue" | "captcha" | None
+    """
+    hay = html.lower()
+    url = (page_url or "").lower()
+    if "queue-it.net" in url or any(m in hay for m in _QUEUE_MARKERS):
+        return "queue"
+    if any(m in hay for m in _CAPTCHA_MARKERS):
+        return "captcha"
+    return None
+
 
 def _looks_blocked(html: str) -> bool:
     """Nur relevant, wenn KEINE Produkte gefunden wurden: echte Sperrseite?"""
@@ -133,7 +155,9 @@ class Scraper:
     def fetch(self) -> dict:
         """Eine Pruefung durchfuehren.
 
-        Rueckgabe: {"status": "ok"|"blocked"|"error", "products": [...], "note": str}
+        Rueckgabe: {"status": "ok"|"queue"|"blocked"|"error", "products": [...], "note": str}
+
+        "queue" = Warteschlange/Captcha vorgeschaltet - starkes Drop-Signal.
         """
         try:
             self._ensure_browser()
@@ -145,8 +169,20 @@ class Scraper:
             html = self._load_once(config.PC_URL)
             products = extract_products(html)
 
-            # Noch keine Produkte? Einmal sanft nachladen (Seite evtl. noch am
-            # Rendern, oder Imperva loest nach einem Reload auf). Kein Ladesturm.
+            # Noch keine Produkte? Erst pruefen, ob eine Warteschlange oder
+            # ein Captcha vorgeschaltet ist (= Drop laeuft). In dem Fall NICHT
+            # neu laden - das koennte eine echte Queue-Position verschlechtern.
+            if not products:
+                shield = _detect_shield(html, self._page.url)
+                if shield == "queue":
+                    return {"status": "queue", "products": [],
+                            "note": "Warteschlange aktiv - vermutlich laeuft ein Drop!"}
+                if shield == "captcha":
+                    return {"status": "queue", "products": [],
+                            "note": "Captcha-Seite (DataDome) aktiv - moeglicher Drop oder Bot-Verdacht."}
+
+            # Einmal sanft nachladen (Seite evtl. noch am Rendern, oder
+            # Imperva loest nach einem Reload auf). Kein Ladesturm.
             if not products:
                 self._page.wait_for_timeout(4000)
                 self._page.reload(wait_until="domcontentloaded", timeout=60000)
@@ -162,7 +198,15 @@ class Scraper:
                 products = extract_products(self._page.content())
                 return {"status": "ok", "products": products, "note": ""}
 
-            # Keine Produkte: echte Sperrseite oder leere/geaenderte Seite?
+            # Keine Produkte: Warteschlange/Captcha, echte Sperrseite oder
+            # leere/geaenderte Seite?
+            shield = _detect_shield(html, self._page.url)
+            if shield == "queue":
+                return {"status": "queue", "products": [],
+                        "note": "Warteschlange aktiv - vermutlich laeuft ein Drop!"}
+            if shield == "captcha":
+                return {"status": "queue", "products": [],
+                        "note": "Captcha-Seite (DataDome) aktiv - moeglicher Drop oder Bot-Verdacht."}
             if _looks_blocked(html):
                 return {"status": "blocked", "products": [],
                         "note": "Bot-Schutz hat den Zugriff blockiert."}

@@ -24,6 +24,10 @@ class Monitor:
         self._req_q = queue.Queue()  # Anfragen fuer manuelle Sofort-Pruefungen
         self.status = "gestartet"
         self.last_error = ""
+        # Drop-Alarm-Zustand: laeuft gerade eine Queue-/Captcha-Phase, und
+        # wann wurde zuletzt alarmiert? (Cooldown gegen Nachrichten-Spam)
+        self._queue_active = False
+        self._queue_last_alert = 0.0
 
     # --- Diff-Logik -------------------------------------------------------
     def _process(self, products: list):
@@ -49,9 +53,31 @@ class Monitor:
                 notifier.notify_event(ev_type, p)
         return events, first_run
 
+    # --- Drop-Alarm (Warteschlange/Captcha erkannt) -----------------------
+    def _handle_queue_alert(self, status: str, note: str):
+        """Beim Uebergang in eine Queue-Phase sofort alarmieren, danach
+        hoechstens alle QUEUE_ALERT_COOLDOWN_MINUTES erneut. Beim ersten
+        erfolgreichen Check nach der Phase gibt es eine Entwarnung."""
+        if status == "queue":
+            now = time.time()
+            cooldown = config.QUEUE_ALERT_COOLDOWN_MINUTES * 60
+            first = not self._queue_active
+            self._queue_active = True
+            if config.QUEUE_ALERT and (first or now - self._queue_last_alert >= cooldown):
+                if notifier.notify_queue(note):
+                    self._queue_last_alert = now
+        elif status == "ok" and self._queue_active:
+            self._queue_active = False
+            self._queue_last_alert = 0.0
+            if config.QUEUE_ALERT:
+                notifier.notify_queue_cleared()
+        # Bei "blocked"/"error" Zustand beibehalten: eine kurzzeitig andere
+        # Fehlermeldung beendet die Queue-Phase nicht.
+
     # --- Ein Durchlauf (NUR im Monitor-Thread aufrufen!) ------------------
     def check_once(self):
         res = self._scraper.fetch()
+        self._handle_queue_alert(res["status"], res.get("note", ""))
         if res["status"] == "ok":
             events, first_run = self._process(res["products"])
             num_avail = sum(1 for p in res["products"] if p["available"])
@@ -83,9 +109,12 @@ class Monitor:
                 pass
             return {"status": "error", "products": [], "note": self.last_error}
 
-    def _next_wait(self, blocked_streak: int) -> float:
+    def _next_wait(self, blocked_streak: int, status: str = "") -> float:
         if blocked_streak:
-            return min(config.CHECK_INTERVAL_SECONDS * (2 ** min(blocked_streak, 4)), 900)
+            # Waehrend einer Queue-Phase kuerzer deckeln, damit die
+            # Entwarnung (Seite wieder frei) schnell kommt.
+            cap = 300 if status == "queue" else 900
+            return min(config.CHECK_INTERVAL_SECONDS * (2 ** min(blocked_streak, 4)), cap)
         return config.CHECK_INTERVAL_SECONDS
 
     # --- Von aussen (Web-Thread): sofortige Pruefung anfragen -------------
@@ -103,10 +132,11 @@ class Monitor:
         blocked_streak = 0
         # Direkt beim Start einmal pruefen
         res = self._safe_check()
-        blocked_streak = blocked_streak + 1 if res["status"] == "blocked" else 0
+        last_status = res["status"]
+        blocked_streak = blocked_streak + 1 if last_status in ("blocked", "queue") else 0
 
         while not self._stop.is_set():
-            deadline = time.monotonic() + self._next_wait(blocked_streak)
+            deadline = time.monotonic() + self._next_wait(blocked_streak, last_status)
 
             # Bis zum Deadline auf manuelle Anfragen reagieren
             manual_rescheduled = False
@@ -120,12 +150,13 @@ class Monitor:
                     break
                 # Manuelle Pruefung im richtigen (diesem) Thread ausfuehren
                 r = self._safe_check()
-                blocked_streak = blocked_streak + 1 if r["status"] == "blocked" else 0
+                last_status = r["status"]
+                blocked_streak = blocked_streak + 1 if last_status in ("blocked", "queue") else 0
                 try:
                     resp.put_nowait(r)
                 except Exception:
                     pass
-                deadline = time.monotonic() + self._next_wait(blocked_streak)
+                deadline = time.monotonic() + self._next_wait(blocked_streak, last_status)
                 manual_rescheduled = True
 
             if self._stop.is_set():
@@ -136,7 +167,8 @@ class Monitor:
 
             # Planmaessige Pruefung
             res = self._safe_check()
-            blocked_streak = blocked_streak + 1 if res["status"] == "blocked" else 0
+            last_status = res["status"]
+            blocked_streak = blocked_streak + 1 if last_status in ("blocked", "queue") else 0
 
         self._scraper.close()
 

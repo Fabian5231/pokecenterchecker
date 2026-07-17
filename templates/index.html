@@ -26,6 +26,7 @@
   .dot{width:9px;height:9px;border-radius:50%}
   .ok{background:rgba(34,197,94,.15);color:var(--green)} .ok .dot{background:var(--green)}
   .blocked{background:rgba(245,158,11,.15);color:var(--amber)} .blocked .dot{background:var(--amber)}
+  .queue{background:rgba(168,85,247,.18);color:#c084fc} .queue .dot{background:#c084fc}
   .error{background:rgba(239,68,68,.15);color:var(--red)} .error .dot{background:var(--red)}
   .idle{background:rgba(148,163,184,.15);color:var(--muted)} .idle .dot{background:var(--muted)}
   h2{font-size:15px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
@@ -135,8 +136,8 @@
 </div>
 
 <script>
-const STATUS_LABEL = {ok:"Läuft – zuletzt OK", blocked:"Bot-Schutz blockiert", error:"Fehler", gestartet:"Startet…", idle:"Bereit"};
-function statusClass(s){ return ({ok:"ok",blocked:"blocked",error:"error"})[s] || "idle"; }
+const STATUS_LABEL = {ok:"Läuft – zuletzt OK", queue:"🚨 Warteschlange/Captcha – Drop?!", blocked:"Bot-Schutz blockiert", error:"Fehler", gestartet:"Startet…", idle:"Bereit"};
+function statusClass(s){ return ({ok:"ok",queue:"queue",blocked:"blocked",error:"error"})[s] || "idle"; }
 
 function esc(s){ return (s??"").toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
