@@ -3,6 +3,7 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 
+import config
 from config import DB_PATH
 
 _lock = threading.Lock()
@@ -48,8 +49,50 @@ def init():
                 num_available INTEGER,
                 note          TEXT
             );
+            CREATE TABLE IF NOT EXISTS settings (
+                key    TEXT PRIMARY KEY,
+                value  TEXT
+            );
             """
         )
+
+
+# --- Einstellungen (zur Laufzeit ueber die Weboberflaeche aenderbar) --------
+def get_setting(key: str, default: str | None = None) -> str | None:
+    with _lock, _conn() as c:
+        row = c.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value: str):
+    with _lock, _conn() as c:
+        c.execute(
+            """INSERT INTO settings (key, value) VALUES (?,?)
+               ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+            (key, str(value)),
+        )
+
+
+def clamp_interval(seconds: int) -> int:
+    return max(config.INTERVAL_MIN_SECONDS,
+               min(int(seconds), config.INTERVAL_MAX_SECONDS))
+
+
+def check_interval() -> int:
+    """Aktuelles Pruefintervall: Wert aus der Weboberflaeche, sonst aus .env."""
+    val = get_setting("check_interval")
+    if val is None:
+        return config.CHECK_INTERVAL_SECONDS
+    try:
+        return clamp_interval(int(val))
+    except (TypeError, ValueError):
+        return config.CHECK_INTERVAL_SECONDS
+
+
+def set_check_interval(seconds: int) -> int:
+    seconds = clamp_interval(seconds)
+    set_setting("check_interval", seconds)
+    return seconds
 
 
 def get_known_products() -> dict:

@@ -141,7 +141,8 @@ journalctl -u pcalerts -f          # Live-Logs
 | Einstellung | Bedeutung | Standard |
 |---|---|---|
 | `PC_URL` | Zu überwachende Kategorie-URL | Elite-Trainer-Box / Tins |
-| `CHECK_INTERVAL_SECONDS` | Prüfintervall in Sekunden | `90` |
+| `CHECK_INTERVAL_SECONDS` | Prüfintervall in Sekunden – **nur der Startwert**, in der Weboberfläche änderbar | `90` |
+| `INTERVAL_MIN_SECONDS` / `INTERVAL_MAX_SECONDS` | Grenzen für das im Frontend einstellbare Intervall | `30` / `86400` |
 | `HEADLESS` | Browser unsichtbar? (siehe Warnung oben) | `false` |
 | `TELEGRAM_BOT_TOKEN` | Bot-Token von BotFather | – |
 | `TELEGRAM_CHAT_ID` | Deine Chat-ID | – |
@@ -152,6 +153,21 @@ journalctl -u pcalerts -f          # Live-Logs
 | `SAVE_DIAGNOSTICS` | Bei fehlgeschlagenen Prüfungen HTML + Screenshot nach `.pw-diag/` schreiben | `true` |
 | `DIAG_KEEP` | Wie viele Diagnose-Dumps aufgehoben werden | `20` |
 | `WEB_HOST` / `WEB_PORT` | Adresse der Weboberfläche | `127.0.0.1` / `8080` |
+
+### Prüfintervall im Browser ändern
+
+Die Kachel **Intervall** im Dashboard ist ein Eingabefeld: Sekunden eintragen,
+`Enter` oder *Speichern* – oder einen der Schnellwerte (1 min / 1,5 min / 5 min /
+15 min / 1 Std.) anklicken. Die Änderung greift **sofort**, auch mitten in einer
+laufenden Wartezeit, und überlebt einen Neustart (sie liegt in der Datenbank,
+nicht in der `.env`). Kein SSH auf den VPS nötig.
+
+`CHECK_INTERVAL_SECONDS` aus der `.env` ist damit nur noch der Startwert, solange
+im Dashboard noch nichts gesetzt wurde.
+
+> **Nicht zu kurz stellen.** Unter ~60 s fällt man dem Bot-Schutz schneller auf
+> und wird häufiger blockiert – dann prüft der Monitor durch den Backoff am Ende
+> *seltener* als bei einem entspannten Intervall. 90–180 s ist ein guter Wert.
 
 ### Drop-Alarm: wann kommt eine Telegram-Nachricht?
 

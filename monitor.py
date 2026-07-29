@@ -18,6 +18,9 @@ from scraper import Scraper
 # Statuswerte, nach denen langsamer weitergeprueft wird (Backoff).
 TROUBLE_STATUSES = ("blocked", "queue", "empty")
 
+# Weckruf fuer die Schleife: nur neu planen, keine Pruefung ausloesen.
+_RESCHEDULE = object()
+
 
 class Monitor:
     def __init__(self):
@@ -33,6 +36,8 @@ class Monitor:
         self._trouble_checks = 0
         self._alerted = False
         self._last_alert = 0.0
+        # Zeitpunkt der letzten Pruefung (monotonic) - Basis fuer die naechste
+        self._last_check_at = time.monotonic()
 
     # --- Diff-Logik -------------------------------------------------------
     def _process(self, products: list):
@@ -132,6 +137,7 @@ class Monitor:
         return res
 
     def _safe_check(self):
+        self._last_check_at = time.monotonic()
         try:
             return self.check_once()
         except Exception as e:
@@ -144,12 +150,13 @@ class Monitor:
             return {"status": "error", "products": [], "note": self.last_error}
 
     def _next_wait(self, blocked_streak: int, status: str = "") -> float:
+        interval = db.check_interval()
         if blocked_streak:
             # Waehrend einer Queue-Phase kuerzer deckeln, damit die
             # Entwarnung (Seite wieder frei) schnell kommt.
             cap = 300 if status == "queue" else 900
-            return min(config.CHECK_INTERVAL_SECONDS * (2 ** min(blocked_streak, 4)), cap)
-        return config.CHECK_INTERVAL_SECONDS
+            return min(interval * (2 ** min(blocked_streak, 4)), cap)
+        return interval
 
     # --- Von aussen (Web-Thread): sofortige Pruefung anfragen -------------
     def request_check(self, timeout: float = 150.0) -> dict:
@@ -161,43 +168,44 @@ class Monitor:
             return {"status": "pending",
                     "note": "Pruefung wurde angestossen und laeuft noch."}
 
+    def reschedule(self):
+        """Nach einer Intervall-Aenderung: laufende Wartezeit neu berechnen,
+        damit ein kuerzeres Intervall sofort greift (statt erst nach Ablauf
+        der alten, evtl. stundenlangen Wartezeit)."""
+        self._req_q.put(_RESCHEDULE)
+
     # --- Schleife (Monitor-Thread) ---------------------------------------
     def _run(self):
-        blocked_streak = 0
         # Direkt beim Start einmal pruefen
         res = self._safe_check()
         last_status = res["status"]
-        blocked_streak = blocked_streak + 1 if last_status in TROUBLE_STATUSES else 0
+        blocked_streak = 1 if last_status in TROUBLE_STATUSES else 0
 
         while not self._stop.is_set():
-            deadline = time.monotonic() + self._next_wait(blocked_streak, last_status)
-
-            # Bis zum Deadline auf manuelle Anfragen reagieren
-            manual_rescheduled = False
-            while not self._stop.is_set():
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    break
+            # Deadline immer aus dem Zeitpunkt der letzten Pruefung ableiten,
+            # damit ein geaendertes Intervall sofort richtig wirkt.
+            remaining = (self._last_check_at
+                         + self._next_wait(blocked_streak, last_status)
+                         - time.monotonic())
+            if remaining > 0:
                 try:
-                    resp = self._req_q.get(timeout=remaining)
+                    item = self._req_q.get(timeout=remaining)
                 except queue.Empty:
+                    item = None
+                if self._stop.is_set():
                     break
-                # Manuelle Pruefung im richtigen (diesem) Thread ausfuehren
-                r = self._safe_check()
-                last_status = r["status"]
-                blocked_streak = blocked_streak + 1 if last_status in TROUBLE_STATUSES else 0
-                try:
-                    resp.put_nowait(r)
-                except Exception:
-                    pass
-                deadline = time.monotonic() + self._next_wait(blocked_streak, last_status)
-                manual_rescheduled = True
-
-            if self._stop.is_set():
-                break
-            if manual_rescheduled and time.monotonic() < deadline:
-                # Nach manueller Pruefung wurde neu geplant -> weiter warten
-                continue
+                if item is _RESCHEDULE:
+                    continue  # nur neu planen, keine Pruefung
+                if item is not None:
+                    # Manuelle Pruefung im richtigen (diesem) Thread ausfuehren
+                    r = self._safe_check()
+                    last_status = r["status"]
+                    blocked_streak = blocked_streak + 1 if last_status in TROUBLE_STATUSES else 0
+                    try:
+                        item.put_nowait(r)
+                    except Exception:
+                        pass
+                    continue
 
             # Planmaessige Pruefung
             res = self._safe_check()
@@ -215,3 +223,6 @@ class Monitor:
 
     def stop(self):
         self._stop.set()
+        # Schleife aus dem Warten holen, damit sie nicht bis zum Ende des
+        # Intervalls (u. U. Stunden) haengen bleibt.
+        self._req_q.put(_RESCHEDULE)

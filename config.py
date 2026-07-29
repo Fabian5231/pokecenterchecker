@@ -19,7 +19,13 @@ PC_URL = os.getenv(
     "https://www.pokemoncenter.com/de-de/category/trading-card-game"
     "?category=elite-trainer-box%2Ctins",
 )
+# Startwert fuer das Pruefintervall. In der Weboberflaeche aenderbar - der dort
+# gesetzte Wert liegt in der Datenbank und hat Vorrang (siehe db.check_interval).
 CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "90"))
+# Grenzen fuer das im Frontend einstellbare Intervall.
+# Unter ~30 s wird man vom Bot-Schutz sehr schnell ausgesperrt.
+INTERVAL_MIN_SECONDS = int(os.getenv("INTERVAL_MIN_SECONDS", "30"))
+INTERVAL_MAX_SECONDS = int(os.getenv("INTERVAL_MAX_SECONDS", "86400"))
 HEADLESS = _bool("HEADLESS", False)
 # Fenster aus dem sichtbaren Bereich schieben (laeuft weiter, stoert aber nicht).
 BROWSER_OFFSCREEN = _bool("BROWSER_OFFSCREEN", False)

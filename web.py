@@ -29,7 +29,9 @@ def _state() -> dict:
     return {
         "status": monitor.status,
         "last_error": monitor.last_error,
-        "interval": config.CHECK_INTERVAL_SECONDS,
+        "interval": db.check_interval(),
+        "interval_min": config.INTERVAL_MIN_SECONDS,
+        "interval_max": config.INTERVAL_MAX_SECONDS,
         "url": config.PC_URL,
         "telegram": config.TELEGRAM_ENABLED,
         "notify_on": sorted(config.NOTIFY_ON),
@@ -98,6 +100,26 @@ def api_checks():
     return jsonify(_checks_page(page, per_page))
 
 
+@app.route("/api/interval", methods=["POST"])
+def api_interval():
+    """Pruefintervall zur Laufzeit aendern (wird in der DB gespeichert)."""
+    data = request.get_json(silent=True) or {}
+    try:
+        seconds = int(data.get("seconds"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Bitte eine Zahl angeben."}), 400
+    if not config.INTERVAL_MIN_SECONDS <= seconds <= config.INTERVAL_MAX_SECONDS:
+        return jsonify({
+            "ok": False,
+            "error": f"Erlaubt sind {config.INTERVAL_MIN_SECONDS}–"
+                     f"{config.INTERVAL_MAX_SECONDS} Sekunden.",
+        }), 400
+    seconds = db.set_check_interval(seconds)
+    # Laufende Wartezeit neu berechnen, damit die Aenderung sofort greift
+    monitor.reschedule()
+    return jsonify({"ok": True, "interval": seconds})
+
+
 @app.route("/api/check-now", methods=["POST"])
 def api_check_now():
     # WICHTIG: nicht selbst scrapen (anderer Thread!), sondern den
@@ -110,7 +132,7 @@ def main():
     db.init()
     monitor.start()
     print(f"PCAlerts laeuft.  Weboberflaeche: http://{config.WEB_HOST}:{config.WEB_PORT}")
-    print(f"Pruefintervall: alle {config.CHECK_INTERVAL_SECONDS} Sekunden")
+    print(f"Pruefintervall: alle {db.check_interval()} Sekunden")
     print(f"Telegram aktiv: {config.TELEGRAM_ENABLED}")
     # use_reloader=False, damit der Monitor-Thread nicht doppelt startet
     app.run(host=config.WEB_HOST, port=config.WEB_PORT,

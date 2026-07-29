@@ -55,6 +55,16 @@
   .pgbtn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;
     padding:7px 12px;font-size:13px;font-weight:600}
   .pgbtn:disabled{opacity:.4;cursor:not-allowed}
+  .ivl{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+  .ivl input{width:88px;background:#0b1020;color:var(--fg);border:1px solid var(--line);
+    border-radius:8px;padding:6px 8px;font-size:20px;font-weight:700;font-family:inherit}
+  .ivl input:focus{outline:none;border-color:var(--accent)}
+  .ivl .pgbtn{padding:6px 11px;margin-left:auto;cursor:pointer}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .chip{background:rgba(148,163,184,.12);color:var(--muted);border:1px solid var(--line);
+    border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer}
+  .chip:hover{color:var(--fg);border-color:var(--accent)}
+  .chip.active{background:rgba(255,203,5,.16);color:var(--accent);border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -73,8 +83,14 @@
     </div>
     <div class="card">
       <h3>Intervall</h3>
-      <div class="big" id="interval">–</div>
-      <div class="small muted">automatisch im Hintergrund</div>
+      <div class="ivl">
+        <input id="ivlInput" type="number" min="30" max="86400" step="10"
+               inputmode="numeric" aria-label="Prüfintervall in Sekunden">
+        <span class="small muted">Sek.</span>
+        <button class="pgbtn" id="ivlSave" onclick="saveInterval()">Speichern</button>
+      </div>
+      <div class="small muted" id="ivlHint">automatisch im Hintergrund</div>
+      <div class="chips" id="ivlChips"></div>
     </div>
     <div class="card">
       <h3>Artikel gesamt / verfügbar</h3>
@@ -142,6 +158,76 @@ function statusClass(s){ return ({ok:"ok",queue:"queue",blocked:"blocked",empty:
 
 function esc(s){ return (s??"").toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+/* ---- Prüfintervall ---- */
+const IVL_PRESETS = [[60,'1 min'],[90,'1,5 min'],[300,'5 min'],[900,'15 min'],[3600,'1 Std.']];
+let ivlCurrent = null;
+let ivlTouched = false;   // Nutzer tippt gerade -> Feld nicht überschreiben
+let ivlHintUntil = 0;     // solange steht eine Rückmeldung im Hinweis-Text
+
+function humanInterval(sec){
+  if (sec < 60) return 'alle ' + sec + ' Sekunden';
+  if (sec < 3600) return 'alle ' + Math.round(sec/60) + ' Minuten';
+  const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
+  return 'alle ' + h + ' Std.' + (m ? ' ' + m + ' Min.' : '');
+}
+
+function updateInterval(s){
+  ivlCurrent = s.interval;
+  const input = document.getElementById('ivlInput');
+  input.min = s.interval_min; input.max = s.interval_max;
+  if (!ivlTouched && document.activeElement !== input) input.value = s.interval;
+  if (Date.now() > ivlHintUntil){
+    const hint = document.getElementById('ivlHint');
+    hint.textContent = humanInterval(s.interval);
+    hint.style.color = '';
+  }
+  document.getElementById('ivlChips').innerHTML = IVL_PRESETS.map(([sec,label]) =>
+    `<button class="chip${sec===ivlCurrent?' active':''}" onclick="applyInterval(${sec})">${label}</button>`
+  ).join('');
+}
+
+function applyInterval(sec){
+  document.getElementById('ivlInput').value = sec;
+  saveInterval();
+}
+
+async function saveInterval(){
+  const input = document.getElementById('ivlInput');
+  const btn = document.getElementById('ivlSave');
+  const hint = document.getElementById('ivlHint');
+  const seconds = parseInt(input.value, 10);
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/interval', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({seconds})
+    });
+    const d = await r.json();
+    if (d.ok){
+      ivlCurrent = d.interval;
+      input.value = d.interval;
+      ivlTouched = false;
+      hint.textContent = 'Gespeichert ✓ – gilt ab sofort (' + humanInterval(d.interval) + ')';
+      hint.style.color = 'var(--green)';
+    } else {
+      hint.textContent = d.error || 'Konnte nicht gespeichert werden.';
+      hint.style.color = 'var(--red)';
+    }
+  } catch(e){
+    hint.textContent = 'Server nicht erreichbar.';
+    hint.style.color = 'var(--red)';
+  }
+  ivlHintUntil = Date.now() + 5000;
+  btn.disabled = false;
+  refresh();
+}
+
+document.getElementById('ivlInput').addEventListener('input', ()=>{ ivlTouched = true; });
+document.getElementById('ivlInput').addEventListener('keydown', e=>{
+  if (e.key === 'Enter'){ e.preventDefault(); saveInterval(); }
+});
+
 async function refresh(){
   let s;
   try { s = await (await fetch('/api/state')).json(); } catch(e){ return; }
@@ -152,7 +238,7 @@ async function refresh(){
 
   document.getElementById('lastCheck').textContent = s.last_check || '–';
   document.getElementById('lastNote').textContent = s.last_check_note || (s.last_error || '');
-  document.getElementById('interval').textContent = 'alle ' + s.interval + ' s';
+  updateInterval(s);
   document.getElementById('tg').textContent = s.telegram ? 'aktiv ✓' : 'nicht konfiguriert';
   document.getElementById('tg').style.color = s.telegram ? 'var(--green)' : 'var(--muted)';
   document.getElementById('notifyOn').textContent = 'bei: ' + (s.notify_on||[]).join(', ');
