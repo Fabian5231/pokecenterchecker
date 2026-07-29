@@ -6,6 +6,7 @@ Pruefungen wiederverwendet, damit die Sitzung "warm" bleibt.
 """
 import json
 import re
+from datetime import datetime
 
 from patchright.sync_api import sync_playwright
 
@@ -24,23 +25,51 @@ _BLOCK_MARKERS = ("_incapsula_resource", "incident id",
 # (Queue-it) und/oder ein Captcha (DataDome) vor die Seite. Diese Merkmale
 # werden NUR geprueft, wenn keine Produkte gefunden wurden - auf einer
 # normalen Produktseite koennen sie nicht falsch anschlagen.
-_QUEUE_MARKERS = ("queue-it", "queueit", "waiting room", "warteschlange",
-                  "waitingroom", "softblock")
-_CAPTCHA_MARKERS = ("geo.captcha-delivery.com", "captcha-delivery")
+_QUEUE_MARKERS = (
+    "queue-it", "queueit", "queue.pokemoncenter", "waiting room", "waitingroom",
+    "warteschlange", "warteraum", "wartebereich", "softblock",
+    "you are now in line", "you are in line", "your turn", "estimated wait",
+    "geschaetzte wartezeit", "voraussichtliche wartezeit", "bitte warten",
+    "queuepassingdetail", "queue_number", "high traffic", "hoher andrang",
+    "vielen dank fuer deine geduld",
+)
+# Domains/Skripte der Warteschlangen-Anbieter (im HTML oder in der URL)
+_QUEUE_HOSTS = ("queue-it.net", "queue.pokemoncenter.com", "waitingroom")
+
+# Achtung: KEINE generischen Vendor-Namen wie "recaptcha" aufnehmen - das
+# laedt die normale Seite in ihrem JS-Bundle mit, das gaebe Fehlalarme.
+_CAPTCHA_MARKERS = (
+    "geo.captcha-delivery.com", "captcha-delivery", "captcha_delivery",
+    "hcaptcha.com", "px-captcha", "human verification",
+    "verify you are a human", "verify you are human",
+    "bestaetige, dass du ein mensch bist", "sicherheitsabfrage",
+    "please enable js and disable any ad blocker",
+)
 
 
-def _detect_shield(html: str, page_url: str) -> str | None:
+def _detect_shield(html: str, page_url: str, http_status: int | None = None) -> str | None:
     """Warteschlangen- oder Captcha-Seite erkennen (nur bei 0 Produkten rufen).
 
     Rueckgabe: "queue" | "captcha" | None
     """
     hay = html.lower()
     url = (page_url or "").lower()
-    if "queue-it.net" in url or any(m in hay for m in _QUEUE_MARKERS):
+    if any(h in url for h in _QUEUE_HOSTS) or any(h in hay for h in _QUEUE_HOSTS):
+        return "queue"
+    if any(m in hay for m in _QUEUE_MARKERS):
         return "queue"
     if any(m in hay for m in _CAPTCHA_MARKERS):
         return "captcha"
+    # 429/503 = "zu viele Anfragen" / "Dienst ueberlastet". Auf einer Seite,
+    # die sonst 200 liefert, ist das das typische Drop-Ueberlastungssignal.
+    if http_status in (429, 503):
+        return "queue"
     return None
+
+
+def _page_title(html: str) -> str:
+    m = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
+    return re.sub(r"\s+", " ", m.group(1)).strip()[:120] if m else ""
 
 
 def _looks_blocked(html: str) -> bool:
@@ -100,6 +129,7 @@ class Scraper:
         self._ctx = None
         self._page = None
         self._warmed = False
+        self._http_status = None  # HTTP-Code der zuletzt geladenen Seite
 
     def _ensure_browser(self):
         if self._ctx is not None:
@@ -148,9 +178,52 @@ class Scraper:
         self._pw = self._ctx = self._page = None
 
     def _load_once(self, url: str, wait_ms: int = 6000) -> str:
-        self._page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        resp = self._page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        self._http_status = resp.status if resp else None
         self._page.wait_for_timeout(wait_ms)
         return self._page.content()
+
+    # --- Diagnose ---------------------------------------------------------
+    def _dump(self, html: str, status: str):
+        """HTML + Screenshot der Seite wegschreiben, wenn eine Pruefung nicht
+        geklappt hat. Ohne das raten wir beim naechsten Drop wieder, wie die
+        Warteschlangen-Seite ueberhaupt aussieht."""
+        if not config.SAVE_DIAGNOSTICS:
+            return
+        try:
+            config.DIAG_DIR.mkdir(exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            base = config.DIAG_DIR / f"{stamp}_{status}"
+            base.with_suffix(".html").write_text(html, encoding="utf-8",
+                                                 errors="replace")
+            try:
+                self._page.screenshot(path=str(base.with_suffix(".png")),
+                                      full_page=False, timeout=15000)
+            except Exception:
+                pass
+            # Nur die neuesten Dumps behalten
+            files = sorted(config.DIAG_DIR.glob("*_*.*"))
+            for old in files[:-(config.DIAG_KEEP * 2)]:
+                try:
+                    old.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass  # Diagnose darf die Ueberwachung nie stoppen
+
+    def _fail(self, status: str, note: str, html: str) -> dict:
+        """Fehlschlag protokollieren (inkl. HTTP-Code + Titel) und dumpen."""
+        extra = []
+        if self._http_status and self._http_status != 200:
+            extra.append(f"HTTP {self._http_status}")
+        title = _page_title(html)
+        if title:
+            extra.append(f'"{title}"')
+        if extra:
+            note = f"{note} ({', '.join(extra)})"
+        self._dump(html, status)
+        return {"status": status, "products": [], "note": note,
+                "http_status": self._http_status}
 
     def fetch(self) -> dict:
         """Eine Pruefung durchfuehren.
@@ -173,19 +246,16 @@ class Scraper:
             # ein Captcha vorgeschaltet ist (= Drop laeuft). In dem Fall NICHT
             # neu laden - das koennte eine echte Queue-Position verschlechtern.
             if not products:
-                shield = _detect_shield(html, self._page.url)
-                if shield == "queue":
-                    return {"status": "queue", "products": [],
-                            "note": "Warteschlange aktiv - vermutlich laeuft ein Drop!"}
-                if shield == "captcha":
-                    return {"status": "queue", "products": [],
-                            "note": "Captcha-Seite (DataDome) aktiv - moeglicher Drop oder Bot-Verdacht."}
+                shield = _detect_shield(html, self._page.url, self._http_status)
+                if shield:
+                    return self._shield_result(shield, html)
 
             # Einmal sanft nachladen (Seite evtl. noch am Rendern, oder
             # Imperva loest nach einem Reload auf). Kein Ladesturm.
             if not products:
                 self._page.wait_for_timeout(4000)
-                self._page.reload(wait_until="domcontentloaded", timeout=60000)
+                resp = self._page.reload(wait_until="domcontentloaded", timeout=60000)
+                self._http_status = resp.status if resp else self._http_status
                 self._page.wait_for_timeout(6000)
                 html = self._page.content()
                 products = extract_products(html)
@@ -196,22 +266,20 @@ class Scraper:
                     self._page.mouse.wheel(0, 4000)
                     self._page.wait_for_timeout(800)
                 products = extract_products(self._page.content())
-                return {"status": "ok", "products": products, "note": ""}
+                return {"status": "ok", "products": products, "note": "",
+                        "http_status": self._http_status}
 
             # Keine Produkte: Warteschlange/Captcha, echte Sperrseite oder
             # leere/geaenderte Seite?
-            shield = _detect_shield(html, self._page.url)
-            if shield == "queue":
-                return {"status": "queue", "products": [],
-                        "note": "Warteschlange aktiv - vermutlich laeuft ein Drop!"}
-            if shield == "captcha":
-                return {"status": "queue", "products": [],
-                        "note": "Captcha-Seite (DataDome) aktiv - moeglicher Drop oder Bot-Verdacht."}
+            shield = _detect_shield(html, self._page.url, self._http_status)
+            if shield:
+                return self._shield_result(shield, html)
             if _looks_blocked(html):
-                return {"status": "blocked", "products": [],
-                        "note": "Bot-Schutz hat den Zugriff blockiert."}
-            return {"status": "ok", "products": [],
-                    "note": "0 Artikel gefunden (Kategorie leer oder Seite geaendert)."}
+                return self._fail("blocked", "Bot-Schutz hat den Zugriff blockiert.",
+                                  html)
+            return self._fail("empty",
+                              "0 Artikel gefunden (Kategorie leer oder Seite geaendert).",
+                              html)
 
         except Exception as e:
             # Browser evtl. abgestuerzt -> beim naechsten Mal neu starten
@@ -219,7 +287,16 @@ class Scraper:
                 self.close()
             except Exception:
                 pass
-            return {"status": "error", "products": [], "note": str(e)[:300]}
+            return {"status": "error", "products": [], "note": str(e)[:300],
+                    "http_status": None}
+
+    def _shield_result(self, shield: str, html: str) -> dict:
+        if shield == "queue":
+            return self._fail("queue", "Warteschlange aktiv - vermutlich laeuft ein Drop!",
+                              html)
+        return self._fail("queue",
+                          "Captcha-Seite aktiv - moeglicher Drop oder Bot-Verdacht.",
+                          html)
 
 
 if __name__ == "__main__":

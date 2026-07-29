@@ -15,6 +15,9 @@ import db
 import notifier
 from scraper import Scraper
 
+# Statuswerte, nach denen langsamer weitergeprueft wird (Backoff).
+TROUBLE_STATUSES = ("blocked", "queue", "empty")
+
 
 class Monitor:
     def __init__(self):
@@ -24,10 +27,12 @@ class Monitor:
         self._req_q = queue.Queue()  # Anfragen fuer manuelle Sofort-Pruefungen
         self.status = "gestartet"
         self.last_error = ""
-        # Drop-Alarm-Zustand: laeuft gerade eine Queue-/Captcha-Phase, und
-        # wann wurde zuletzt alarmiert? (Cooldown gegen Nachrichten-Spam)
-        self._queue_active = False
-        self._queue_last_alert = 0.0
+        # Alarm-Zustand einer Stoerungsphase (Queue/Captcha/blockiert/leer):
+        # seit wann laeuft sie, wie viele Checks, wurde schon alarmiert?
+        self._trouble_since = 0.0
+        self._trouble_checks = 0
+        self._alerted = False
+        self._last_alert = 0.0
 
     # --- Diff-Logik -------------------------------------------------------
     def _process(self, products: list):
@@ -53,31 +58,60 @@ class Monitor:
                 notifier.notify_event(ev_type, p)
         return events, first_run
 
-    # --- Drop-Alarm (Warteschlange/Captcha erkannt) -----------------------
-    def _handle_queue_alert(self, status: str, note: str):
-        """Beim Uebergang in eine Queue-Phase sofort alarmieren, danach
-        hoechstens alle QUEUE_ALERT_COOLDOWN_MINUTES erneut. Beim ersten
-        erfolgreichen Check nach der Phase gibt es eine Entwarnung."""
+    # --- Drop-/Stoerungs-Alarm -------------------------------------------
+    def _handle_trouble_alert(self, status: str, note: str):
+        """Alarmieren, wenn der Monitor nicht mehr normal an die Seite kommt.
+
+        Zwei Ausloeser:
+          1. "queue" - Warteschlange/Captcha sicher erkannt -> sofort melden.
+          2. Alles andere ausser "ok" (blockiert, Fehler, leere Seite), wenn es
+             UNREACHABLE_ALERT_AFTER_MINUTES am Stueck anhaelt. Genau dieser
+             Fall trat beim Drop auf: der Bot-Schutz machte komplett dicht,
+             die Queue war gar nicht erst sichtbar - und der Monitor blieb
+             stumm. Lieber ein Fehlalarm zu viel als einen Drop verpassen.
+
+        Wiederholte Meldungen fruehestens alle QUEUE_ALERT_COOLDOWN_MINUTES.
+        Nach dem ersten erfolgreichen Check gibt es eine Entwarnung.
+        """
+        now = time.time()
+
+        if status == "ok":
+            if self._alerted and config.QUEUE_ALERT:
+                minutes = (now - self._trouble_since) / 60
+                notifier.notify_queue_cleared(minutes)
+            self._trouble_since = 0.0
+            self._trouble_checks = 0
+            self._alerted = False
+            self._last_alert = 0.0
+            return
+
+        # Stoerung: Phase starten oder fortfuehren
+        if not self._trouble_checks:
+            self._trouble_since = now
+        self._trouble_checks += 1
+        if not config.QUEUE_ALERT:
+            return
+
+        minutes = (now - self._trouble_since) / 60
+        cooldown = config.QUEUE_ALERT_COOLDOWN_MINUTES * 60
+        due = not self._alerted or now - self._last_alert >= cooldown
+        if not due:
+            return
+
         if status == "queue":
-            now = time.time()
-            cooldown = config.QUEUE_ALERT_COOLDOWN_MINUTES * 60
-            first = not self._queue_active
-            self._queue_active = True
-            if config.QUEUE_ALERT and (first or now - self._queue_last_alert >= cooldown):
-                if notifier.notify_queue(note):
-                    self._queue_last_alert = now
-        elif status == "ok" and self._queue_active:
-            self._queue_active = False
-            self._queue_last_alert = 0.0
-            if config.QUEUE_ALERT:
-                notifier.notify_queue_cleared()
-        # Bei "blocked"/"error" Zustand beibehalten: eine kurzzeitig andere
-        # Fehlermeldung beendet die Queue-Phase nicht.
+            sent = notifier.notify_queue(note)
+        elif minutes >= config.UNREACHABLE_ALERT_AFTER_MINUTES:
+            sent = notifier.notify_unreachable(minutes, self._trouble_checks, note)
+        else:
+            return  # kurze Stoerung - erst mal abwarten
+        if sent:
+            self._alerted = True
+            self._last_alert = now
 
     # --- Ein Durchlauf (NUR im Monitor-Thread aufrufen!) ------------------
     def check_once(self):
         res = self._scraper.fetch()
-        self._handle_queue_alert(res["status"], res.get("note", ""))
+        self._handle_trouble_alert(res["status"], res.get("note", ""))
         if res["status"] == "ok":
             events, first_run = self._process(res["products"])
             num_avail = sum(1 for p in res["products"] if p["available"])
@@ -133,7 +167,7 @@ class Monitor:
         # Direkt beim Start einmal pruefen
         res = self._safe_check()
         last_status = res["status"]
-        blocked_streak = blocked_streak + 1 if last_status in ("blocked", "queue") else 0
+        blocked_streak = blocked_streak + 1 if last_status in TROUBLE_STATUSES else 0
 
         while not self._stop.is_set():
             deadline = time.monotonic() + self._next_wait(blocked_streak, last_status)
@@ -151,7 +185,7 @@ class Monitor:
                 # Manuelle Pruefung im richtigen (diesem) Thread ausfuehren
                 r = self._safe_check()
                 last_status = r["status"]
-                blocked_streak = blocked_streak + 1 if last_status in ("blocked", "queue") else 0
+                blocked_streak = blocked_streak + 1 if last_status in TROUBLE_STATUSES else 0
                 try:
                     resp.put_nowait(r)
                 except Exception:
@@ -168,7 +202,7 @@ class Monitor:
             # Planmaessige Pruefung
             res = self._safe_check()
             last_status = res["status"]
-            blocked_streak = blocked_streak + 1 if last_status in ("blocked", "queue") else 0
+            blocked_streak = blocked_streak + 1 if last_status in TROUBLE_STATUSES else 0
 
         self._scraper.close()
 

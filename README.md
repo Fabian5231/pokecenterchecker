@@ -147,8 +147,30 @@ journalctl -u pcalerts -f          # Live-Logs
 | `TELEGRAM_CHAT_ID` | Deine Chat-ID | – |
 | `NOTIFY_ON` | `new` (neu gelistet), `restock` (wieder verfügbar) | `new,restock` |
 | `QUEUE_ALERT` | Drop-Alarm, wenn Warteschlange/Captcha erkannt wird | `true` |
-| `QUEUE_ALERT_COOLDOWN_MINUTES` | Frühestens alle X Minuten erneut alarmieren, solange die Queue steht | `30` |
+| `QUEUE_ALERT_COOLDOWN_MINUTES` | Frühestens alle X Minuten erneut alarmieren, solange die Störung anhält | `30` |
+| `UNREACHABLE_ALERT_AFTER_MINUTES` | Auch alarmieren, wenn die Seite X Minuten am Stück nicht erreichbar ist (ohne erkannte Queue) | `20` |
+| `SAVE_DIAGNOSTICS` | Bei fehlgeschlagenen Prüfungen HTML + Screenshot nach `.pw-diag/` schreiben | `true` |
+| `DIAG_KEEP` | Wie viele Diagnose-Dumps aufgehoben werden | `20` |
 | `WEB_HOST` / `WEB_PORT` | Adresse der Weboberfläche | `127.0.0.1` / `8080` |
+
+### Drop-Alarm: wann kommt eine Telegram-Nachricht?
+
+Bei einem Drop stellt Pokémon Center eine Warteschlange und/oder ein Captcha vor
+die Seite – der Monitor kommt dann nicht mehr durch. Damit das nicht unbemerkt
+bleibt, gibt es zwei Auslöser:
+
+1. **Warteschlange/Captcha erkannt** (Status `queue`, lila im Dashboard) →
+   sofort „🚨 Drop-Alarm".
+2. **Seite gar nicht erreichbar** (Status `blocked` / `error` / `empty`) und das
+   länger als `UNREACHABLE_ALERT_AFTER_MINUTES` → „⚠️ Achtung – Seite nicht
+   erreichbar". Das ist das Auffangnetz für den Fall, dass der Bot-Schutz
+   komplett dichtmacht und die Warteschlange gar nicht erst sichtbar wird.
+
+Danach höchstens alle `QUEUE_ALERT_COOLDOWN_MINUTES` eine Erinnerung, und beim
+ersten erfolgreichen Check eine Entwarnung mit Dauer der Störung.
+
+Was auf der Seite wirklich stand, landet als HTML + Screenshot in `.pw-diag/` –
+damit lassen sich die Erkennungsmerkmale nach einem Drop nachschärfen.
 
 **Andere Kategorie überwachen:** Einfach die gewünschte Kategorie-Seite auf
 pokemoncenter.com öffnen, die URL aus der Adresszeile kopieren und als `PC_URL`

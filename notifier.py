@@ -67,10 +67,32 @@ def notify_queue(note: str = "") -> bool:
     return send_message(text)
 
 
-def notify_queue_cleared() -> bool:
+def notify_unreachable(minutes: float, checks: int, note: str = "") -> bool:
+    """Auffangnetz: Seite laenger am Stueck nicht erreichbar. Bei einem Drop
+    macht der Bot-Schutz oft komplett dicht, ohne dass eine Warteschlange
+    ueberhaupt sichtbar wird - dann ist das hier das einzige Signal."""
+    text = (
+        "⚠️ <b>Achtung – Seite nicht erreichbar!</b>\n\n"
+        f"Seit <b>{int(minutes)} Minuten</b> ({checks} Prüfungen in Folge) kommt "
+        "der Monitor nicht mehr auf die Kategorie-Seite.\n\n"
+        "Das ist typisch für einen <b>Drop mit Warteschlange/Captcha</b> – "
+        "kann aber auch nur der Bot-Schutz sein.\n"
+    )
+    if note:
+        text += f"\n<i>{html.escape(note)}</i>\n"
+    text += (
+        f'\n<a href="{html.escape(config.PC_URL)}">Selbst nachsehen »</a>\n'
+        "👉 Am besten kurz selbst im Browser prüfen – falls eine Warteschlange "
+        "läuft, sofort einreihen!"
+    )
+    return send_message(text)
+
+
+def notify_queue_cleared(minutes: float = 0.0) -> bool:
+    dauer = f" (Dauer: {int(minutes)} Min.)" if minutes >= 1 else ""
     return send_message(
-        "✅ <b>Entwarnung:</b> Die Warteschlange/Captcha ist weg, "
-        "die Seite ist wieder normal erreichbar. Der Monitor prüft weiter."
+        f"✅ <b>Entwarnung{dauer}:</b> Die Seite ist wieder normal erreichbar. "
+        "Der Monitor prüft weiter."
     )
 
 
