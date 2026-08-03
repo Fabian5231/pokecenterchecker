@@ -17,7 +17,7 @@
   header h1{font-size:19px;margin:0;font-weight:700}
   header .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);
     display:grid;place-items:center;color:#1a2130;font-weight:900}
-  .wrap{max-width:1100px;margin:0 auto;padding:22px 24px 60px}
+  .wrap{max-width:1600px;margin:0 auto;padding:22px 24px 60px}
   .row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;flex:1;min-width:210px}
   .card h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
@@ -36,6 +36,10 @@
   th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
   th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
   tr:last-child td{border-bottom:none}
+  /* Schmale Spalten auf Inhaltsbreite schrumpfen -> die Artikel-Spalte bekommt den Rest,
+     und Preis/Datum/Link brechen nicht mehr um. */
+  .nowrap{width:1%;white-space:nowrap}
+  td.price,th.price{width:1%;white-space:nowrap;text-align:right}
   .tag{font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
   .in{background:rgba(34,197,94,.16);color:var(--green)}
   .out{background:rgba(148,163,184,.14);color:var(--muted)}
@@ -133,7 +137,8 @@
   <h2>🛒 Aktuelle Artikel</h2>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Status</th><th>Artikel</th><th>Preis</th><th>Zuerst gesehen</th><th></th></tr></thead>
+      <thead><tr><th class="nowrap">Status</th><th>Artikel</th><th class="price">Preis</th>
+        <th class="nowrap">Zuerst gesehen</th><th class="nowrap"></th></tr></thead>
       <tbody id="products"><tr><td colspan="5" class="muted">Lade…</td></tr></tbody>
     </table>
   </div>
@@ -141,7 +146,8 @@
   <h2>🔔 Erkannte Ereignisse</h2>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Zeit</th><th>Ereignis</th><th>Artikel</th><th>Preis</th></tr></thead>
+      <thead><tr><th class="nowrap">Zeit</th><th class="nowrap">Ereignis</th><th>Artikel</th>
+        <th class="price">Preis</th></tr></thead>
       <tbody id="events"><tr><td colspan="4" class="muted">Noch keine Ereignisse.</td></tr></tbody>
     </table>
   </div>
@@ -158,7 +164,8 @@
   </div>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Zeit</th><th>Ergebnis</th><th>Artikel</th><th>Hinweis</th></tr></thead>
+      <thead><tr><th class="nowrap">Zeit</th><th class="nowrap">Ergebnis</th>
+        <th class="nowrap">Artikel</th><th>Hinweis</th></tr></thead>
       <tbody id="checks"><tr><td colspan="4" class="muted">Lade…</td></tr></tbody>
     </table>
   </div>
@@ -350,19 +357,19 @@ async function refresh(){
 
   document.getElementById('products').innerHTML = s.products.length ? s.products.map(p=>`
     <tr>
-      <td><span class="tag ${p.available?'in':'out'}">${p.available?'VERFÜGBAR':'ausverkauft'}</span></td>
+      <td class="nowrap"><span class="tag ${p.available?'in':'out'}">${p.available?'VERFÜGBAR':'ausverkauft'}</span></td>
       <td>${esc(p.name)}<div class="small muted">${esc(p.id)}</div></td>
-      <td>${esc(p.price||'–')}</td>
-      <td class="small muted">${esc(p.first_seen_fmt)}</td>
-      <td><a href="${esc(p.url)}" target="_blank">öffnen ›</a></td>
+      <td class="price">${esc(p.price||'–')}</td>
+      <td class="small muted nowrap">${esc(p.first_seen_fmt)}</td>
+      <td class="nowrap"><a href="${esc(p.url)}" target="_blank">öffnen ›</a></td>
     </tr>`).join('') : '<tr><td colspan="5" class="muted">Noch keine Daten.</td></tr>';
 
   document.getElementById('events').innerHTML = s.events.length ? s.events.map(e=>`
     <tr>
-      <td class="small muted">${esc(e.ts_fmt)}</td>
-      <td class="${e.type==='new'?'evt-new':'evt-restock'}">${e.type==='new'?'🆕 Neu gelistet':'✅ Wieder verfügbar'}</td>
+      <td class="small muted nowrap">${esc(e.ts_fmt)}</td>
+      <td class="nowrap ${e.type==='new'?'evt-new':'evt-restock'}">${e.type==='new'?'🆕 Neu gelistet':'✅ Wieder verfügbar'}</td>
       <td>${esc(e.name)}<div class="small muted">${esc(e.product_id)}</div></td>
-      <td>${esc(e.price||'–')}</td>
+      <td class="price">${esc(e.price||'–')}</td>
     </tr>`).join('') : '<tr><td colspan="4" class="muted">Noch keine Ereignisse.</td></tr>';
 }
 
@@ -382,9 +389,9 @@ async function refreshChecks(){
 
   document.getElementById('checks').innerHTML = d.checks.length ? d.checks.map(c=>`
     <tr>
-      <td class="small muted">${esc(c.ts_fmt)}</td>
-      <td><span class="pill ${statusClass(c.status)}" style="font-size:11px;padding:2px 8px"><span class="dot"></span>${esc(c.status)}</span></td>
-      <td class="small">${c.num_products} (${c.num_available} verf.)</td>
+      <td class="small muted nowrap">${esc(c.ts_fmt)}</td>
+      <td class="nowrap"><span class="pill ${statusClass(c.status)}" style="font-size:11px;padding:2px 8px"><span class="dot"></span>${esc(c.status)}</span></td>
+      <td class="small nowrap">${c.num_products} (${c.num_available} verf.)</td>
       <td class="small muted">${esc(c.note||'')}</td>
     </tr>`).join('') : '<tr><td colspan="4" class="muted">Noch keine Prüfungen.</td></tr>';
 
