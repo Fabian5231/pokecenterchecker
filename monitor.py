@@ -64,6 +64,15 @@ class Monitor:
         return events, first_run
 
     # --- Drop-/Stoerungs-Alarm -------------------------------------------
+    def _reset_trouble(self):
+        """Alarm-Zustand einer Stoerungsphase verwerfen. Auch beim Pausieren
+        noetig, sonst kaeme nach dem Fortsetzen eine Entwarnung fuer eine
+        Stoerung, die laengst vorbei ist."""
+        self._trouble_since = 0.0
+        self._trouble_checks = 0
+        self._alerted = False
+        self._last_alert = 0.0
+
     def _handle_trouble_alert(self, status: str, note: str):
         """Alarmieren, wenn der Monitor nicht mehr normal an die Seite kommt.
 
@@ -84,10 +93,7 @@ class Monitor:
             if self._alerted and config.QUEUE_ALERT:
                 minutes = (now - self._trouble_since) / 60
                 notifier.notify_queue_cleared(minutes)
-            self._trouble_since = 0.0
-            self._trouble_checks = 0
-            self._alerted = False
-            self._last_alert = 0.0
+            self._reset_trouble()
             return
 
         # Stoerung: Phase starten oder fortfuehren
@@ -169,19 +175,64 @@ class Monitor:
                     "note": "Pruefung wurde angestossen und laeuft noch."}
 
     def reschedule(self):
-        """Nach einer Intervall-Aenderung: laufende Wartezeit neu berechnen,
-        damit ein kuerzeres Intervall sofort greift (statt erst nach Ablauf
-        der alten, evtl. stundenlangen Wartezeit)."""
+        """Nach einer Intervall-Aenderung (oder beim Pausieren/Fortsetzen):
+        laufende Wartezeit neu berechnen, damit die Aenderung sofort greift
+        (statt erst nach Ablauf der alten, evtl. stundenlangen Wartezeit)."""
         self._req_q.put(_RESCHEDULE)
+
+    # --- Pause (Monitor-Thread) ------------------------------------------
+    def _wait_while_paused(self) -> bool:
+        """Warten, solange die Weboberflaeche auf Pause steht: keine Abfragen
+        der Seite, dadurch auch keine Ereignisse und keine Telegram-Nachrichten.
+        Gibt True zurueck, wenn tatsaechlich pausiert wurde."""
+        if not db.paused():
+            return False
+
+        self.status = "paused"
+        self.last_error = ""
+        # Laufende Stoerungsphase beenden, sonst klappert nach dem Fortsetzen
+        # eine veraltete Meldung nach.
+        self._reset_trouble()
+
+        while db.paused() and not self._stop.is_set():
+            try:
+                # Kurzes Timeout, damit eine Aenderung auch dann ankommt, wenn
+                # sie nicht ueber die Weboberflaeche (reschedule) kam.
+                item = self._req_q.get(timeout=30)
+            except queue.Empty:
+                continue
+            if item is not None and item is not _RESCHEDULE:
+                # Manuelle Pruefung waehrend der Pause: nicht ausfuehren
+                try:
+                    item.put_nowait({
+                        "status": "paused", "products": [],
+                        "note": "Pausiert - es wird nichts geprueft.",
+                    })
+                except Exception:
+                    pass
+        return True
 
     # --- Schleife (Monitor-Thread) ---------------------------------------
     def _run(self):
-        # Direkt beim Start einmal pruefen
-        res = self._safe_check()
-        last_status = res["status"]
-        blocked_streak = 1 if last_status in TROUBLE_STATUSES else 0
+        last_status = ""
+        blocked_streak = 0
+        due_now = True  # beim Start und nach jeder Pause sofort pruefen
 
         while not self._stop.is_set():
+            if self._wait_while_paused():
+                # Nach dem Fortsetzen frisch anfangen
+                last_status = ""
+                blocked_streak = 0
+                due_now = True
+                continue
+
+            if due_now:
+                res = self._safe_check()
+                last_status = res["status"]
+                blocked_streak = 1 if last_status in TROUBLE_STATUSES else 0
+                due_now = False
+                continue
+
             # Deadline immer aus dem Zeitpunkt der letzten Pruefung ableiten,
             # damit ein geaendertes Intervall sofort richtig wirkt.
             remaining = (self._last_check_at

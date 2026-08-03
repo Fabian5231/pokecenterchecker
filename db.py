@@ -95,6 +95,21 @@ def set_check_interval(seconds: int) -> int:
     return seconds
 
 
+def paused() -> bool:
+    """Ist die Ueberwachung ueber die Weboberflaeche pausiert?
+
+    Pausiert heisst: keine Pruefungen und keine Telegram-Nachrichten. Der
+    Wert liegt in der DB, damit die Pause auch einen Neustart uebersteht.
+    """
+    return get_setting("paused") == "1"
+
+
+def set_paused(value: bool) -> bool:
+    value = bool(value)
+    set_setting("paused", "1" if value else "0")
+    return value
+
+
 def get_known_products() -> dict:
     with _lock, _conn() as c:
         rows = c.execute("SELECT * FROM products").fetchall()

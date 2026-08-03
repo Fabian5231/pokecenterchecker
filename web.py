@@ -29,6 +29,7 @@ def _state() -> dict:
     return {
         "status": monitor.status,
         "last_error": monitor.last_error,
+        "paused": db.paused(),
         "interval": db.check_interval(),
         "interval_min": config.INTERVAL_MIN_SECONDS,
         "interval_max": config.INTERVAL_MAX_SECONDS,
@@ -120,8 +121,30 @@ def api_interval():
     return jsonify({"ok": True, "interval": seconds})
 
 
+@app.route("/api/pause", methods=["POST"])
+def api_pause():
+    """Ueberwachung komplett pausieren bzw. fortsetzen.
+
+    Pausiert: keine Abfragen der Seite und keine Telegram-Nachrichten. Der
+    Zustand steht in der DB und gilt darum auch nach einem Neustart weiter.
+    """
+    data = request.get_json(silent=True) or {}
+    value = data.get("paused")
+    if not isinstance(value, bool):
+        return jsonify({"ok": False,
+                        "error": "Feld 'paused' (true/false) fehlt."}), 400
+    paused = db.set_paused(value)
+    # Schleife sofort wecken, damit die Pause nicht erst nach Ablauf der
+    # laufenden Wartezeit greift.
+    monitor.reschedule()
+    return jsonify({"ok": True, "paused": paused})
+
+
 @app.route("/api/check-now", methods=["POST"])
 def api_check_now():
+    if db.paused():
+        return jsonify({"ok": False, "status": "paused",
+                        "note": "Pausiert - erst fortsetzen."}), 409
     # WICHTIG: nicht selbst scrapen (anderer Thread!), sondern den
     # Monitor-Thread um eine sofortige Pruefung bitten.
     res = monitor.request_check()
@@ -134,6 +157,8 @@ def main():
     print(f"PCAlerts laeuft.  Weboberflaeche: http://{config.WEB_HOST}:{config.WEB_PORT}")
     print(f"Pruefintervall: alle {db.check_interval()} Sekunden")
     print(f"Telegram aktiv: {config.TELEGRAM_ENABLED}")
+    if db.paused():
+        print("Achtung: Ueberwachung ist PAUSIERT (in der Weboberflaeche fortsetzen).")
     # use_reloader=False, damit der Monitor-Thread nicht doppelt startet
     app.run(host=config.WEB_HOST, port=config.WEB_PORT,
             debug=False, use_reloader=False, threaded=True)

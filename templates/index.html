@@ -30,6 +30,7 @@
   .empty{background:rgba(148,163,184,.15);color:var(--muted)} .empty .dot{background:var(--amber)}
   .error{background:rgba(239,68,68,.15);color:var(--red)} .error .dot{background:var(--red)}
   .idle{background:rgba(148,163,184,.15);color:var(--muted)} .idle .dot{background:var(--muted)}
+  .paused{background:rgba(245,158,11,.15);color:var(--amber)} .paused .dot{background:var(--amber)}
   h2{font-size:15px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -65,6 +66,13 @@
     border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer}
   .chip:hover{color:var(--fg);border-color:var(--accent)}
   .chip.active{background:rgba(255,203,5,.16);color:var(--accent);border-color:var(--accent)}
+  .actions{display:flex;align-items:center;gap:10px}
+  #pauseBtn{cursor:pointer}
+  #pauseBtn.resume{border-color:var(--green);color:var(--green)}
+  .banner{display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.12);
+    border:1px solid rgba(245,158,11,.45);color:var(--amber);border-radius:12px;
+    padding:12px 16px;margin-bottom:18px;font-size:14px}
+  .banner[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -75,6 +83,12 @@
 </header>
 
 <div class="wrap">
+  <div class="banner" id="pauseBanner" hidden>
+    <span style="font-size:18px">⏸</span>
+    <span><b>Pausiert.</b> Es werden keine Abfragen ausgeführt und der Telegram-Bot
+    schreibt nichts. Bleibt auch nach einem Neustart aktiv.</span>
+  </div>
+
   <div class="row">
     <div class="card">
       <h3>Letzte Prüfung</h3>
@@ -106,7 +120,10 @@
 
   <div class="flex-between">
     <div class="small muted">Überwacht: <a id="pcurl" href="#" target="_blank">Kategorie-Seite</a></div>
-    <button id="checkBtn" onclick="checkNow()">Jetzt prüfen</button>
+    <div class="actions">
+      <button class="pgbtn" id="pauseBtn" onclick="togglePause()">⏸ Pausieren</button>
+      <button id="checkBtn" onclick="checkNow()">Jetzt prüfen</button>
+    </div>
   </div>
 
   <h2>🛒 Aktuelle Artikel</h2>
@@ -153,8 +170,8 @@
 </div>
 
 <script>
-const STATUS_LABEL = {ok:"Läuft – zuletzt OK", queue:"🚨 Warteschlange/Captcha – Drop?!", blocked:"Bot-Schutz blockiert", empty:"Seite leer / geändert", error:"Fehler", gestartet:"Startet…", idle:"Bereit"};
-function statusClass(s){ return ({ok:"ok",queue:"queue",blocked:"blocked",empty:"empty",error:"error"})[s] || "idle"; }
+const STATUS_LABEL = {ok:"Läuft – zuletzt OK", queue:"🚨 Warteschlange/Captcha – Drop?!", blocked:"Bot-Schutz blockiert", empty:"Seite leer / geändert", error:"Fehler", gestartet:"Startet…", paused:"⏸ Pausiert – keine Abfragen, kein Telegram", idle:"Bereit"};
+function statusClass(s){ return ({ok:"ok",queue:"queue",blocked:"blocked",empty:"empty",error:"error",paused:"paused"})[s] || "idle"; }
 
 function esc(s){ return (s??"").toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -228,9 +245,36 @@ document.getElementById('ivlInput').addEventListener('keydown', e=>{
   if (e.key === 'Enter'){ e.preventDefault(); saveInterval(); }
 });
 
+/* ---- Pause (stoppt Abfragen UND Telegram) ---- */
+let isPaused = false;
+
+function updatePause(s){
+  isPaused = !!s.paused;
+  const btn = document.getElementById('pauseBtn');
+  btn.textContent = isPaused ? '▶ Fortsetzen' : '⏸ Pausieren';
+  btn.classList.toggle('resume', isPaused);
+  document.getElementById('pauseBanner').hidden = !isPaused;
+  document.getElementById('checkBtn').disabled = isPaused;
+}
+
+async function togglePause(){
+  const btn = document.getElementById('pauseBtn');
+  btn.disabled = true;
+  try {
+    await fetch('/api/pause', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({paused: !isPaused})
+    });
+  } catch(e){}
+  btn.disabled = false;
+  await Promise.all([refresh(), refreshChecks()]);
+}
+
 async function refresh(){
   let s;
   try { s = await (await fetch('/api/state')).json(); } catch(e){ return; }
+  updatePause(s);
 
   const pill = document.getElementById('statusPill');
   pill.className = 'pill ' + statusClass(s.status);
@@ -314,8 +358,9 @@ async function checkNow(){
   const btn = document.getElementById('checkBtn');
   btn.disabled = true; btn.textContent = 'Prüfe…';
   try { await fetch('/api/check-now', {method:'POST'}); } catch(e){}
+  btn.textContent = 'Jetzt prüfen';
   await Promise.all([refresh(), refreshChecks()]);
-  btn.disabled = false; btn.textContent = 'Jetzt prüfen';
+  btn.disabled = isPaused;   // bleibt gesperrt, falls zwischenzeitlich pausiert
 }
 
 refresh();

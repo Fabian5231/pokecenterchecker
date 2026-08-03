@@ -4,14 +4,28 @@ import html
 import requests
 
 import config
+import db
 
 
 def _api(method: str) -> str:
     return f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/{method}"
 
 
-def send_message(text: str) -> bool:
+def _paused() -> bool:
+    try:
+        return db.paused()
+    except Exception:
+        return False
+
+
+def send_message(text: str, force: bool = False) -> bool:
+    """force=True nur fuer manuell ausgeloeste Testnachrichten - die sollen
+    auch waehrend einer Pause ankommen."""
     if not config.TELEGRAM_ENABLED:
+        return False
+    if not force and _paused():
+        # Pausiert: der Bot bleibt still. Greift auch dann noch, wenn eine
+        # Pruefung schon lief, als die Pause gesetzt wurde.
         return False
     try:
         r = requests.post(
@@ -100,7 +114,8 @@ def send_test() -> bool:
     return send_message(
         "🔔 <b>PCAlerts</b> ist eingerichtet.\n"
         "Du bekommst hier Nachrichten, sobald neue Sammelkarten-Artikel "
-        "gelistet oder wieder verfügbar sind."
+        "gelistet oder wieder verfügbar sind.",
+        force=True,
     )
 
 

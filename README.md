@@ -14,6 +14,8 @@ sobald **neue Sammelkarten-Artikel gelistet** oder **wieder verfügbar** werden 
 - Weboberfläche zeigt: letzte Prüfung, aktuelle Artikel + Verfügbarkeit,
   erkannte Ereignisse und die komplette Prüf-Historie.
 - Telegram-Bot benachrichtigt dich sofort bei neuen / wieder verfügbaren Artikeln.
+- Per Knopfdruck komplett pausierbar – dann wird nichts abgefragt und der Bot
+  schreibt nichts.
 - Kommt am Bot-Schutz der Seite (DataDome + Imperva Incapsula) vorbei, indem ein
   echter, getarnter Browser verwendet wird.
 
@@ -168,6 +170,28 @@ im Dashboard noch nichts gesetzt wurde.
 > **Nicht zu kurz stellen.** Unter ~60 s fällt man dem Bot-Schutz schneller auf
 > und wird häufiger blockiert – dann prüft der Monitor durch den Backoff am Ende
 > *seltener* als bei einem entspannten Intervall. 90–180 s ist ein guter Wert.
+
+### Pausieren (Abfragen + Telegram komplett stoppen)
+
+Der Knopf **⏸ Pausieren** neben *Jetzt prüfen* legt die Überwachung still:
+
+- Die Seite wird **gar nicht mehr abgefragt** – auch keine manuelle Prüfung
+  (*Jetzt prüfen* ist gesperrt).
+- Der **Telegram-Bot schreibt nichts**, auch keinen Drop-Alarm und keine
+  Entwarnung. Lief zufällig gerade noch eine Prüfung, wird deren Nachricht
+  ebenfalls unterdrückt.
+- Der Browser bleibt geöffnet, der Dienst läuft weiter – nur eben untätig.
+
+Die Pause greift **sofort** (auch mitten in einer laufenden Wartezeit) und liegt
+in der Datenbank, **überlebt also einen Neustart**. Solange sie aktiv ist, zeigt
+das Dashboard oben ein orangefarbenes Banner und den Status *Pausiert*.
+
+Mit **▶ Fortsetzen** geht es weiter: es wird sofort einmal geprüft, danach wieder
+im eingestellten Intervall. Ein Alarm, der beim Pausieren noch offen war, wird
+verworfen – es kommt keine verspätete Entwarnung.
+
+> Eine Testnachricht (`python notifier.py`) kommt bewusst auch während der Pause
+> durch, damit sich das Telegram-Setup jederzeit prüfen lässt.
 
 ### Drop-Alarm: wann kommt eine Telegram-Nachricht?
 
