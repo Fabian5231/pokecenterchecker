@@ -69,6 +69,9 @@
   .actions{display:flex;align-items:center;gap:10px}
   #pauseBtn{cursor:pointer}
   #pauseBtn.resume{border-color:var(--green);color:var(--green)}
+  #tgBtn{margin-top:10px;padding:5px 11px;cursor:pointer}
+  #tgBtn.enable{border-color:var(--green);color:var(--green)}
+  #tgBtn[hidden]{display:none}
   .banner{display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.12);
     border:1px solid rgba(245,158,11,.45);color:var(--amber);border-radius:12px;
     padding:12px 16px;margin-bottom:18px;font-size:14px}
@@ -115,6 +118,7 @@
       <h3>Telegram</h3>
       <div class="big" id="tg">–</div>
       <div class="small muted" id="notifyOn"></div>
+      <button class="pgbtn" id="tgBtn" onclick="toggleTelegram()" hidden>…</button>
     </div>
   </div>
 
@@ -271,10 +275,65 @@ async function togglePause(){
   await Promise.all([refresh(), refreshChecks()]);
 }
 
+/* ---- Telegram-Bot (unabhängig von der Pause an/aus) ---- */
+let tgOn = true;
+
+function updateTelegram(s){
+  tgOn = !!s.telegram_on;
+  const el = document.getElementById('tg');
+  const note = document.getElementById('notifyOn');
+  const btn = document.getElementById('tgBtn');
+
+  if (!s.telegram){                       // kein Token/Chat-ID in der .env
+    el.textContent = 'nicht konfiguriert';
+    el.style.color = 'var(--muted)';
+    note.textContent = 'TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID in .env setzen';
+    btn.hidden = true;
+    return;
+  }
+
+  btn.hidden = false;
+  btn.textContent = tgOn ? '🔕 Bot abschalten' : '🔔 Bot einschalten';
+  btn.classList.toggle('enable', !tgOn);   // grün, wenn er wieder an soll
+  if (!tgOn){
+    el.textContent = 'abgeschaltet';
+    el.style.color = 'var(--amber)';
+    note.textContent = 'Prüfungen laufen weiter – es wird nur nichts gesendet.';
+  } else if (s.paused){
+    el.textContent = 'an (pausiert)';
+    el.style.color = 'var(--muted)';
+    note.textContent = 'Pause stoppt auch den Bot – erst fortsetzen.';
+  } else {
+    el.textContent = 'aktiv ✓';
+    el.style.color = 'var(--green)';
+    note.textContent = 'bei: ' + (s.notify_on||[]).join(', ');
+  }
+}
+
+async function toggleTelegram(){
+  const btn = document.getElementById('tgBtn');
+  const note = document.getElementById('notifyOn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/telegram', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({enabled: !tgOn})
+    });
+    const d = await r.json();
+    if (!d.ok){ note.textContent = d.error || 'Konnte nicht umgestellt werden.'; }
+  } catch(e){
+    note.textContent = 'Server nicht erreichbar.';
+  }
+  btn.disabled = false;
+  await refresh();
+}
+
 async function refresh(){
   let s;
   try { s = await (await fetch('/api/state')).json(); } catch(e){ return; }
   updatePause(s);
+  updateTelegram(s);
 
   const pill = document.getElementById('statusPill');
   pill.className = 'pill ' + statusClass(s.status);
@@ -283,9 +342,6 @@ async function refresh(){
   document.getElementById('lastCheck').textContent = s.last_check || '–';
   document.getElementById('lastNote').textContent = s.last_check_note || (s.last_error || '');
   updateInterval(s);
-  document.getElementById('tg').textContent = s.telegram ? 'aktiv ✓' : 'nicht konfiguriert';
-  document.getElementById('tg').style.color = s.telegram ? 'var(--green)' : 'var(--muted)';
-  document.getElementById('notifyOn').textContent = 'bei: ' + (s.notify_on||[]).join(', ');
   document.getElementById('pcurl').href = s.url;
 
   const avail = s.products.filter(p=>p.available).length;

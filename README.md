@@ -16,6 +16,8 @@ sobald **neue Sammelkarten-Artikel gelistet** oder **wieder verfügbar** werden 
 - Telegram-Bot benachrichtigt dich sofort bei neuen / wieder verfügbaren Artikeln.
 - Per Knopfdruck komplett pausierbar – dann wird nichts abgefragt und der Bot
   schreibt nichts.
+- Der Telegram-Bot lässt sich auch **einzeln** abschalten: die Überwachung läuft
+  dann normal weiter, nur die Nachrichten bleiben aus.
 - Kommt am Bot-Schutz der Seite (DataDome + Imperva Incapsula) vorbei, indem ein
   echter, getarnter Browser verwendet wird.
 
@@ -192,6 +194,32 @@ verworfen – es kommt keine verspätete Entwarnung.
 
 > Eine Testnachricht (`python notifier.py`) kommt bewusst auch während der Pause
 > durch, damit sich das Telegram-Setup jederzeit prüfen lässt.
+
+### Telegram-Bot einzeln an-/abschalten
+
+Unabhängig von der Pause gibt es in der Kachel **Telegram** den Knopf
+**🔕 Bot abschalten** / **🔔 Bot einschalten**:
+
+- Die Seite wird **weiter ganz normal geprüft**, Artikel, Ereignisse und
+  Prüf-Historie laufen unverändert weiter – nur **Telegram bleibt still**
+  (auch Drop-Alarm und Entwarnung).
+- Praktisch, wenn du z. B. nachts keine Nachrichten willst, den Monitor aber
+  weiterlaufen lassen möchtest: am Dashboard siehst du hinterher trotzdem alles.
+- Der Schalter wirkt **sofort** – auch auf eine Prüfung, die gerade schon lief –
+  und liegt in der Datenbank, **überlebt also einen Neustart**.
+
+Verhältnis zur Pause: **Pausieren stoppt beides** (Abfragen *und* Bot), dieser
+Schalter nur den Bot. Steht die Überwachung auf Pause, zeigt die Kachel darum
+*an (pausiert)*.
+
+| Zustand | Seite wird geprüft | Telegram |
+| --- | --- | --- |
+| Normal | ✅ | ✅ |
+| Bot abgeschaltet | ✅ | ❌ |
+| Pausiert | ❌ | ❌ |
+
+> Auch hier gilt: eine Testnachricht (`python notifier.py`) kommt bewusst durch,
+> selbst wenn der Bot abgeschaltet ist.
 
 ### Drop-Alarm: wann kommt eine Telegram-Nachricht?
 

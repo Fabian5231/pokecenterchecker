@@ -11,21 +11,23 @@ def _api(method: str) -> str:
     return f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/{method}"
 
 
-def _paused() -> bool:
+def _silenced() -> bool:
+    """Bot stumm? Zwei unabhaengige Gruende: die Ueberwachung ist komplett
+    pausiert, oder der Bot allein wurde in der Weboberflaeche abgeschaltet."""
     try:
-        return db.paused()
+        return db.paused() or not db.telegram_on()
     except Exception:
         return False
 
 
 def send_message(text: str, force: bool = False) -> bool:
     """force=True nur fuer manuell ausgeloeste Testnachrichten - die sollen
-    auch waehrend einer Pause ankommen."""
+    auch bei Pause oder abgeschaltetem Bot ankommen."""
     if not config.TELEGRAM_ENABLED:
         return False
-    if not force and _paused():
-        # Pausiert: der Bot bleibt still. Greift auch dann noch, wenn eine
-        # Pruefung schon lief, als die Pause gesetzt wurde.
+    if not force and _silenced():
+        # Stumm: nichts verschicken. Greift auch dann noch, wenn eine
+        # Pruefung schon lief, als der Schalter umgelegt wurde.
         return False
     try:
         r = requests.post(

@@ -34,7 +34,10 @@ def _state() -> dict:
         "interval_min": config.INTERVAL_MIN_SECONDS,
         "interval_max": config.INTERVAL_MAX_SECONDS,
         "url": config.PC_URL,
+        # konfiguriert (Token + Chat-ID in der .env) vs. eingeschaltet (Schalter
+        # in der Weboberflaeche) - zwei verschiedene Dinge.
         "telegram": config.TELEGRAM_ENABLED,
+        "telegram_on": db.telegram_on(),
         "notify_on": sorted(config.NOTIFY_ON),
         "last_check": _fmt(last["ts"]) if last else None,
         "last_check_status": last["status"] if last else None,
@@ -140,6 +143,29 @@ def api_pause():
     return jsonify({"ok": True, "paused": paused})
 
 
+@app.route("/api/telegram", methods=["POST"])
+def api_telegram():
+    """Nur den Telegram-Bot an-/abschalten - unabhaengig von der Pause.
+
+    Abgeschaltet: der Monitor prueft ganz normal weiter und erfasst auch
+    Ereignisse, es geht nur keine Nachricht raus. Der Zustand steht in der DB
+    und gilt darum auch nach einem Neustart weiter.
+    """
+    data = request.get_json(silent=True) or {}
+    value = data.get("enabled")
+    if not isinstance(value, bool):
+        return jsonify({"ok": False,
+                        "error": "Feld 'enabled' (true/false) fehlt."}), 400
+    if value and not config.TELEGRAM_ENABLED:
+        return jsonify({
+            "ok": False,
+            "error": "Telegram ist nicht konfiguriert "
+                     "(TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID in .env).",
+        }), 409
+    enabled = db.set_telegram_on(value)
+    return jsonify({"ok": True, "telegram_on": enabled})
+
+
 @app.route("/api/check-now", methods=["POST"])
 def api_check_now():
     if db.paused():
@@ -156,7 +182,9 @@ def main():
     monitor.start()
     print(f"PCAlerts laeuft.  Weboberflaeche: http://{config.WEB_HOST}:{config.WEB_PORT}")
     print(f"Pruefintervall: alle {db.check_interval()} Sekunden")
-    print(f"Telegram aktiv: {config.TELEGRAM_ENABLED}")
+    print(f"Telegram konfiguriert: {config.TELEGRAM_ENABLED}")
+    if config.TELEGRAM_ENABLED and not db.telegram_on():
+        print("Hinweis: Telegram-Bot ist ABGESCHALTET (in der Weboberflaeche einschalten).")
     if db.paused():
         print("Achtung: Ueberwachung ist PAUSIERT (in der Weboberflaeche fortsetzen).")
     # use_reloader=False, damit der Monitor-Thread nicht doppelt startet

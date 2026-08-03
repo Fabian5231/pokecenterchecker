@@ -110,6 +110,22 @@ def set_paused(value: bool) -> bool:
     return value
 
 
+def telegram_on() -> bool:
+    """Darf der Telegram-Bot Nachrichten schicken?
+
+    Unabhaengig von der Pause: der Monitor prueft ganz normal weiter und
+    erfasst auch Ereignisse - nur verschickt wird nichts. Ohne gesetzten
+    Wert ist der Bot an (Standard wie bisher).
+    """
+    return get_setting("telegram_on", "1") != "0"
+
+
+def set_telegram_on(value: bool) -> bool:
+    value = bool(value)
+    set_setting("telegram_on", "1" if value else "0")
+    return value
+
+
 def get_known_products() -> dict:
     with _lock, _conn() as c:
         rows = c.execute("SELECT * FROM products").fetchall()
