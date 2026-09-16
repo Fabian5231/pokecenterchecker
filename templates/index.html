@@ -76,6 +76,8 @@
   #tgBtn{margin-top:10px;padding:5px 11px;cursor:pointer}
   #tgBtn.enable{border-color:var(--green);color:var(--green)}
   #tgBtn[hidden]{display:none}
+  #tgTestBtn{margin-top:10px;margin-left:8px;padding:5px 11px;cursor:pointer}
+  #tgTestBtn[hidden]{display:none}
   .banner{display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.12);
     border:1px solid rgba(245,158,11,.45);color:var(--amber);border-radius:12px;
     padding:12px 16px;margin-bottom:18px;font-size:14px}
@@ -123,6 +125,7 @@
       <div class="big" id="tg">–</div>
       <div class="small muted" id="notifyOn"></div>
       <button class="pgbtn" id="tgBtn" onclick="toggleTelegram()" hidden>…</button>
+      <button class="pgbtn" id="tgTestBtn" onclick="sendTelegramTest()" hidden>🧪 Testnachricht senden</button>
     </div>
   </div>
 
@@ -290,15 +293,18 @@ function updateTelegram(s){
   const el = document.getElementById('tg');
   const note = document.getElementById('notifyOn');
   const btn = document.getElementById('tgBtn');
+  const testBtn = document.getElementById('tgTestBtn');
 
   if (!s.telegram){                       // kein Token/Chat-ID in der .env
     el.textContent = 'nicht konfiguriert';
     el.style.color = 'var(--muted)';
     note.textContent = 'TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID in .env setzen';
     btn.hidden = true;
+    testBtn.hidden = true;
     return;
   }
 
+  testBtn.hidden = false;
   btn.hidden = false;
   btn.textContent = tgOn ? '🔕 Bot abschalten' : '🔔 Bot einschalten';
   btn.classList.toggle('enable', !tgOn);   // grün, wenn er wieder an soll
@@ -334,6 +340,23 @@ async function toggleTelegram(){
   }
   btn.disabled = false;
   await refresh();
+}
+
+async function sendTelegramTest(){
+  const btn = document.getElementById('tgTestBtn');
+  const note = document.getElementById('notifyOn');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '… wird gesendet';
+  try {
+    const r = await fetch('/api/telegram-test', { method:'POST' });
+    const d = await r.json();
+    note.textContent = d.ok ? '✅ Testnachricht gesendet – Telegram prüfen.' : (d.error || 'Senden fehlgeschlagen.');
+  } catch(e){
+    note.textContent = 'Server nicht erreichbar.';
+  }
+  btn.disabled = false;
+  btn.textContent = original;
 }
 
 async function refresh(){

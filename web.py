@@ -5,6 +5,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 
 import config
 import db
+import notifier
 from monitor import Monitor
 
 app = Flask(__name__)
@@ -164,6 +165,21 @@ def api_telegram():
         }), 409
     enabled = db.set_telegram_on(value)
     return jsonify({"ok": True, "telegram_on": enabled})
+
+
+@app.route("/api/telegram-test", methods=["POST"])
+def api_telegram_test():
+    """Testnachricht senden - unabhaengig von Pause/Bot-Schalter (force=True)."""
+    if not config.TELEGRAM_ENABLED:
+        return jsonify({
+            "ok": False,
+            "error": "Telegram ist nicht konfiguriert "
+                     "(TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID in .env).",
+        }), 409
+    sent = notifier.send_test()
+    if not sent:
+        return jsonify({"ok": False, "error": "Senden fehlgeschlagen - Token/Chat-ID prüfen."}), 502
+    return jsonify({"ok": True})
 
 
 @app.route("/api/check-now", methods=["POST"])
