@@ -104,6 +104,24 @@ def notify_unreachable(minutes: float, checks: int, note: str = "") -> bool:
     return send_message(text)
 
 
+def notify_maintenance() -> bool:
+    """Geplante Wartung erkannt - bewusst KEIN Drop-Alarm."""
+    return send_message(
+        "🛠 <b>Wartungsarbeiten</b>\n\n"
+        "Pokémon Center ist gerade wegen geplanter Wartung offline "
+        "(„Scheduled Maintenance“). Das ist <b>kein Drop</b>.\n"
+        "Der Monitor prüft weiter und meldet sich, sobald der Shop wieder da ist."
+    )
+
+
+def notify_maintenance_over(minutes: float = 0.0) -> bool:
+    dauer = f" (Dauer: {int(minutes)} Min.)" if minutes >= 1 else ""
+    return send_message(
+        f"✅ <b>Wartung beendet{dauer}:</b> Der Shop ist wieder erreichbar. "
+        "Der Monitor prüft weiter."
+    )
+
+
 def notify_queue_cleared(minutes: float = 0.0) -> bool:
     dauer = f" (Dauer: {int(minutes)} Min.)" if minutes >= 1 else ""
     return send_message(

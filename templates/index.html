@@ -31,6 +31,7 @@
   .error{background:rgba(239,68,68,.15);color:var(--red)} .error .dot{background:var(--red)}
   .idle{background:rgba(148,163,184,.15);color:var(--muted)} .idle .dot{background:var(--muted)}
   .paused{background:rgba(245,158,11,.15);color:var(--amber)} .paused .dot{background:var(--amber)}
+  .maintenance{background:rgba(56,189,248,.15);color:#38bdf8} .maintenance .dot{background:#38bdf8}
   h2{font-size:15px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
@@ -184,8 +185,8 @@
 </div>
 
 <script>
-const STATUS_LABEL = {ok:"Läuft – zuletzt OK", queue:"🚨 Warteschlange/Captcha – Drop?!", blocked:"Bot-Schutz blockiert", empty:"Seite leer / geändert", error:"Fehler", gestartet:"Startet…", paused:"⏸ Pausiert – keine Abfragen, kein Telegram", idle:"Bereit"};
-function statusClass(s){ return ({ok:"ok",queue:"queue",blocked:"blocked",empty:"empty",error:"error",paused:"paused"})[s] || "idle"; }
+const STATUS_LABEL = {ok:"Läuft – zuletzt OK", queue:"🚨 Warteschlange/Captcha – Drop?!", maintenance:"🛠 Wartungsarbeiten – kein Drop", blocked:"Bot-Schutz blockiert", empty:"Seite leer / geändert", error:"Fehler", gestartet:"Startet…", paused:"⏸ Pausiert – keine Abfragen, kein Telegram", idle:"Bereit"};
+function statusClass(s){ return ({ok:"ok",queue:"queue",maintenance:"maintenance",blocked:"blocked",empty:"empty",error:"error",paused:"paused"})[s] || "idle"; }
 
 function esc(s){ return (s??"").toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 

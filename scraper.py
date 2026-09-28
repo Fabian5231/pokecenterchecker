@@ -47,13 +47,28 @@ _CAPTCHA_MARKERS = (
 )
 
 
-def _detect_shield(html: str, page_url: str, http_status: int | None = None) -> str | None:
-    """Warteschlangen- oder Captcha-Seite erkennen (nur bei 0 Produkten rufen).
+# Geplante Wartung: Pokemon Center liefert dann HTTP 503 mit dem Titel
+# "Scheduled Maintenance | Pokémon Center Official Site". Muss VOR der
+# Queue-Erkennung geprueft werden, sonst gilt die 503 als Drop-Signal.
+_MAINTENANCE_TITLE_MARKERS = ("maintenance", "wartung")
+_MAINTENANCE_MARKERS = (
+    "scheduled maintenance", "under maintenance", "down for maintenance",
+    "wartungsarbeiten",
+)
 
-    Rueckgabe: "queue" | "captcha" | None
+
+def _detect_shield(html: str, page_url: str, http_status: int | None = None) -> str | None:
+    """Wartungs-, Warteschlangen- oder Captcha-Seite erkennen (nur bei
+    0 Produkten rufen).
+
+    Rueckgabe: "maintenance" | "queue" | "captcha" | None
     """
     hay = html.lower()
     url = (page_url or "").lower()
+    title = _page_title(html).lower()
+    if (any(m in title for m in _MAINTENANCE_TITLE_MARKERS)
+            or any(m in hay for m in _MAINTENANCE_MARKERS)):
+        return "maintenance"
     if any(h in url for h in _QUEUE_HOSTS) or any(h in hay for h in _QUEUE_HOSTS):
         return "queue"
     if any(m in hay for m in _QUEUE_MARKERS):
@@ -228,9 +243,11 @@ class Scraper:
     def fetch(self) -> dict:
         """Eine Pruefung durchfuehren.
 
-        Rueckgabe: {"status": "ok"|"queue"|"blocked"|"error", "products": [...], "note": str}
+        Rueckgabe: {"status": "ok"|"queue"|"maintenance"|"blocked"|"empty"|"error",
+                    "products": [...], "note": str}
 
         "queue" = Warteschlange/Captcha vorgeschaltet - starkes Drop-Signal.
+        "maintenance" = geplante Wartung - KEIN Drop.
         """
         try:
             self._ensure_browser()
@@ -291,6 +308,10 @@ class Scraper:
                     "http_status": None}
 
     def _shield_result(self, shield: str, html: str) -> dict:
+        if shield == "maintenance":
+            return self._fail("maintenance",
+                              "Wartungsarbeiten - Shop voruebergehend offline.",
+                              html)
         if shield == "queue":
             return self._fail("queue", "Warteschlange aktiv - vermutlich laeuft ein Drop!",
                               html)

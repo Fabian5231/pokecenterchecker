@@ -16,7 +16,10 @@ import notifier
 from scraper import Scraper
 
 # Statuswerte, nach denen langsamer weitergeprueft wird (Backoff).
-TROUBLE_STATUSES = ("blocked", "queue", "empty")
+TROUBLE_STATUSES = ("blocked", "queue", "empty", "maintenance")
+# Statuswerte, bei denen die Wartezeit kuerzer gedeckelt wird, damit das Ende
+# (Queue vorbei / Wartung vorbei) schnell erkannt wird.
+FAST_RECHECK_STATUSES = ("queue", "maintenance")
 
 # Weckruf fuer die Schleife: nur neu planen, keine Pruefung ausloesen.
 _RESCHEDULE = object()
@@ -36,6 +39,9 @@ class Monitor:
         self._trouble_checks = 0
         self._alerted = False
         self._last_alert = 0.0
+        # Wartungsphase: seit wann, und wurde schon informiert?
+        self._maint_since = 0.0
+        self._maint_notified = False
         # Zeitpunkt der letzten Pruefung (monotonic) - Basis fuer die naechste
         self._last_check_at = time.monotonic()
 
@@ -72,6 +78,32 @@ class Monitor:
         self._trouble_checks = 0
         self._alerted = False
         self._last_alert = 0.0
+        self._maint_since = 0.0
+        self._maint_notified = False
+
+    def _handle_maintenance(self, status: str) -> bool:
+        """Geplante Wartung ist kein Drop: einmal ruhig informieren, keinen
+        Drop-/Stoerungsalarm, und am Ende "Wartung beendet" melden.
+        Gibt True zurueck, wenn der Status damit erledigt ist."""
+        now = time.time()
+        if status == "maintenance":
+            if not self._maint_since:
+                self._maint_since = now
+                # Eine evtl. schon laufende Stoerungsphase gehoert zur Wartung
+                self._trouble_since = 0.0
+                self._trouble_checks = 0
+                self._alerted = False
+                self._last_alert = 0.0
+            if not self._maint_notified and config.QUEUE_ALERT:
+                self._maint_notified = notifier.notify_maintenance()
+            return True
+
+        if self._maint_since:
+            if status == "ok" and self._maint_notified:
+                notifier.notify_maintenance_over((now - self._maint_since) / 60)
+            self._maint_since = 0.0
+            self._maint_notified = False
+        return False
 
     def _handle_trouble_alert(self, status: str, note: str):
         """Alarmieren, wenn der Monitor nicht mehr normal an die Seite kommt.
@@ -87,6 +119,9 @@ class Monitor:
         Wiederholte Meldungen fruehestens alle QUEUE_ALERT_COOLDOWN_MINUTES.
         Nach dem ersten erfolgreichen Check gibt es eine Entwarnung.
         """
+        if self._handle_maintenance(status):
+            return
+
         now = time.time()
 
         if status == "ok":
@@ -160,7 +195,7 @@ class Monitor:
         if blocked_streak:
             # Waehrend einer Queue-Phase kuerzer deckeln, damit die
             # Entwarnung (Seite wieder frei) schnell kommt.
-            cap = 300 if status == "queue" else 900
+            cap = 300 if status in FAST_RECHECK_STATUSES else 900
             return min(interval * (2 ** min(blocked_streak, 4)), cap)
         return interval
 

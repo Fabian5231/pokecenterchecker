@@ -237,6 +237,10 @@ bleibt, gibt es zwei Auslöser:
 Danach höchstens alle `QUEUE_ALERT_COOLDOWN_MINUTES` eine Erinnerung, und beim
 ersten erfolgreichen Check eine Entwarnung mit Dauer der Störung.
 
+**Geplante Wartung** („Scheduled Maintenance", HTTP 503) wird eigens erkannt
+(Status `maintenance`, blau im Dashboard) und löst **keinen** Drop-Alarm aus –
+stattdessen einmal „🛠 Wartungsarbeiten" und am Ende „✅ Wartung beendet".
+
 Was auf der Seite wirklich stand, landet als HTML + Screenshot in `.pw-diag/` –
 damit lassen sich die Erkennungsmerkmale nach einem Drop nachschärfen.
 
