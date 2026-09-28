@@ -9,6 +9,7 @@ Monitor-Thread ausgefuehrt (nie direkt aus dem Web-Thread heraus).
 import queue
 import threading
 import time
+from datetime import datetime, timezone
 
 import config
 import db
@@ -17,8 +18,9 @@ from scraper import Scraper
 
 # Statuswerte, nach denen langsamer weitergeprueft wird (Backoff).
 TROUBLE_STATUSES = ("blocked", "queue", "empty", "maintenance")
-# Statuswerte, bei denen die Wartezeit kuerzer gedeckelt wird, damit das Ende
-# (Queue vorbei / Wartung vorbei) schnell erkannt wird.
+# Statuswerte, bei denen der Backoff niedriger gedeckelt wird, damit das Ende
+# (Queue vorbei / Wartung vorbei) schneller erkannt wird. Das eingestellte
+# Intervall wird dabei nie unterschritten.
 FAST_RECHECK_STATUSES = ("queue", "maintenance")
 
 # Weckruf fuer die Schleife: nur neu planen, keine Pruefung ausloesen.
@@ -193,10 +195,14 @@ class Monitor:
     def _next_wait(self, blocked_streak: int, status: str = "") -> float:
         interval = db.check_interval()
         if blocked_streak:
-            # Waehrend einer Queue-Phase kuerzer deckeln, damit die
-            # Entwarnung (Seite wieder frei) schnell kommt.
+            # Backoff darf nur verlaengern: das eingestellte Intervall ist die
+            # Untergrenze, sonst wird bei langen Intervallen (z. B. 1 Std.)
+            # waehrend einer Stoerung haeufiger abgefragt und die IP gesperrt.
+            # Waehrend einer Queue-Phase niedriger deckeln, damit die
+            # Entwarnung (Seite wieder frei) schneller kommt.
             cap = 300 if status in FAST_RECHECK_STATUSES else 900
-            return min(interval * (2 ** min(blocked_streak, 4)), cap)
+            backoff = min(interval * (2 ** min(blocked_streak, 4)), cap)
+            return max(interval, backoff)
         return interval
 
     # --- Von aussen (Web-Thread): sofortige Pruefung anfragen -------------
@@ -247,18 +253,30 @@ class Monitor:
                     pass
         return True
 
+    def _resume_schedule(self) -> tuple[str, int, bool]:
+        """Zeitplan an der letzten gespeicherten Pruefung ausrichten, damit ein
+        Neustart des Dienstes (oder Fortsetzen nach Pause) keine zusaetzliche
+        Abfrage vor Ablauf des Intervalls ausloest.
+        Rueckgabe: (last_status, blocked_streak, due_now)."""
+        try:
+            row = db.last_check()
+            age = (datetime.now(timezone.utc)
+                   - datetime.fromisoformat(row["ts"])).total_seconds()
+        except Exception:
+            return "", 0, True  # keine (lesbare) letzte Pruefung: sofort
+        self._last_check_at = time.monotonic() - max(age, 0.0)
+        last_status = row["status"]
+        return last_status, int(last_status in TROUBLE_STATUSES), False
+
     # --- Schleife (Monitor-Thread) ---------------------------------------
     def _run(self):
-        last_status = ""
-        blocked_streak = 0
-        due_now = True  # beim Start und nach jeder Pause sofort pruefen
+        # Beim Start erst pruefen, wenn das Intervall seit der letzten
+        # Pruefung abgelaufen ist
+        last_status, blocked_streak, due_now = self._resume_schedule()
 
         while not self._stop.is_set():
             if self._wait_while_paused():
-                # Nach dem Fortsetzen frisch anfangen
-                last_status = ""
-                blocked_streak = 0
-                due_now = True
+                last_status, blocked_streak, due_now = self._resume_schedule()
                 continue
 
             if due_now:

@@ -172,6 +172,9 @@ im Dashboard noch nichts gesetzt wurde.
 > **Nicht zu kurz stellen.** Unter ~60 s fällt man dem Bot-Schutz schneller auf
 > und wird häufiger blockiert – dann prüft der Monitor durch den Backoff am Ende
 > *seltener* als bei einem entspannten Intervall. 90–180 s ist ein guter Wert.
+>
+> Das eingestellte Intervall ist eine **Untergrenze**: Auch bei Störung, Queue
+> oder Wartung wird nie häufiger geprüft (nur manuell über *Jetzt prüfen*).
 
 ### Pausieren (Abfragen + Telegram komplett stoppen)
 
@@ -188,8 +191,9 @@ Die Pause greift **sofort** (auch mitten in einer laufenden Wartezeit) und liegt
 in der Datenbank, **überlebt also einen Neustart**. Solange sie aktiv ist, zeigt
 das Dashboard oben ein orangefarbenes Banner und den Status *Pausiert*.
 
-Mit **▶ Fortsetzen** geht es weiter: es wird sofort einmal geprüft, danach wieder
-im eingestellten Intervall. Ein Alarm, der beim Pausieren noch offen war, wird
+Mit **▶ Fortsetzen** geht es weiter: geprüft wird, sobald seit der letzten
+Prüfung das eingestellte Intervall abgelaufen ist (ggf. also sofort). Dasselbe
+gilt nach einem Neustart des Dienstes – ein Neustart löst keine Extra-Abfrage aus. Ein Alarm, der beim Pausieren noch offen war, wird
 verworfen – es kommt keine verspätete Entwarnung.
 
 > Eine Testnachricht (`python notifier.py`) kommt bewusst auch während der Pause
