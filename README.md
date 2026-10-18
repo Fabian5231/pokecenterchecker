@@ -12,7 +12,8 @@ sobald **neue Sammelkarten-Artikel gelistet** oder **wieder verfügbar** werden 
 
 - Prüft die Seite automatisch alle 1–2 Minuten (einstellbar).
 - Weboberfläche zeigt: letzte Prüfung, aktuelle Artikel + Verfügbarkeit,
-  erkannte Ereignisse und die komplette Prüf-Historie.
+  erkannte Ereignisse und die Prüf-Historie der letzten 14 Tage (ältere
+  Prüfungen werden automatisch gelöscht, Ereignisse bleiben erhalten).
 - Telegram-Bot benachrichtigt dich sofort bei neuen / wieder verfügbaren Artikeln.
 - Per Knopfdruck komplett pausierbar – dann wird nichts abgefragt und der Bot
   schreibt nichts.

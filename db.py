@@ -1,7 +1,7 @@
 """SQLite-Speicher: aktueller Produkt-Snapshot, Ereignisse und Pruef-Historie."""
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import config
 from config import DB_PATH
@@ -167,6 +167,15 @@ def add_check(status: str, num_products: int, num_available: int, note: str = ""
         )
 
 
+def prune_checks(keep_days: int) -> int:
+    """Pruefungen loeschen, die aelter als keep_days Tage sind."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=keep_days)
+              ).isoformat(timespec="seconds")
+    with _lock, _conn() as c:
+        cur = c.execute("DELETE FROM checks WHERE ts < ?", (cutoff,))
+    return cur.rowcount
+
+
 def recent_events(limit: int = 50) -> list:
     with _lock, _conn() as c:
         rows = c.execute(
@@ -205,7 +214,13 @@ def last_check() -> dict | None:
 
 
 def has_baseline() -> bool:
-    """Wurde schon mindestens einmal erfolgreich geprueft?"""
+    """Wurde schon mindestens einmal erfolgreich geprueft?
+
+    Massgeblich ist der Produkt-Snapshot, nicht die Pruef-Historie: die wird
+    nach CHECKS_KEEP_DAYS geloescht, und nach einer langen Sperre waere sonst
+    kein 'ok'-Eintrag mehr da - der naechste Lauf gaelte als Erstlauf und
+    wuerde neue Artikel stillschweigend schlucken.
+    """
     with _lock, _conn() as c:
-        row = c.execute("SELECT COUNT(*) AS n FROM checks WHERE status='ok'").fetchone()
-    return row["n"] > 0
+        row = c.execute("SELECT 1 FROM products LIMIT 1").fetchone()
+    return row is not None

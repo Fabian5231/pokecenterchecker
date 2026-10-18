@@ -46,6 +46,8 @@ class Monitor:
         self._maint_notified = False
         # Zeitpunkt der letzten Pruefung (monotonic) - Basis fuer die naechste
         self._last_check_at = time.monotonic()
+        # Zeitpunkt der letzten Bereinigung der Pruef-Historie (monotonic)
+        self._last_prune_at = None
 
     # --- Diff-Logik -------------------------------------------------------
     def _process(self, products: list):
@@ -191,6 +193,19 @@ class Monitor:
             except Exception:
                 pass
             return {"status": "error", "products": [], "note": self.last_error}
+        finally:
+            self._prune_history()
+
+    def _prune_history(self):
+        """Alte Pruefungen loeschen - bei der ersten Pruefung, danach hoechstens stuendlich."""
+        now = time.monotonic()
+        if self._last_prune_at is not None and now - self._last_prune_at < 3600:
+            return
+        self._last_prune_at = now
+        try:
+            db.prune_checks(config.CHECKS_KEEP_DAYS)
+        except Exception:
+            pass
 
     def _next_wait(self, blocked_streak: int, status: str = "") -> float:
         interval = db.check_interval()

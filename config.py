@@ -53,6 +53,11 @@ UNREACHABLE_ALERT_AFTER_MINUTES = int(
 SAVE_DIAGNOSTICS = _bool("SAVE_DIAGNOSTICS", True)
 DIAG_KEEP = int(os.getenv("DIAG_KEEP", "20"))
 
+# Pruef-Historie (Tabelle checks): aeltere Eintraege werden automatisch
+# geloescht, sonst waechst sie endlos (bei 90 s ~960 Zeilen pro Tag).
+# Ereignisse (neu/restock) bleiben davon unberuehrt.
+CHECKS_KEEP_DAYS = 14
+
 WEB_HOST = os.getenv("WEB_HOST", "127.0.0.1")
 WEB_PORT = int(os.getenv("WEB_PORT", "8080"))
 
