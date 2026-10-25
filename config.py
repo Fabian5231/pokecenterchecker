@@ -56,8 +56,10 @@ DIAG_KEEP = int(os.getenv("DIAG_KEEP", "20"))
 WEB_HOST = os.getenv("WEB_HOST", "127.0.0.1")
 WEB_PORT = int(os.getenv("WEB_PORT", "8080"))
 
-DB_PATH = BASE_DIR / "pcalerts.db"
-PROFILE_DIR = BASE_DIR / ".pw-profile"
-DIAG_DIR = BASE_DIR / ".pw-diag"
+# Schreibbare Daten (DB, Browser-Profil, Diagnose). Standard: Projektordner.
+DATA_DIR = Path(os.getenv("PCALERTS_DATA_DIR", str(BASE_DIR)))
+DB_PATH = DATA_DIR / "pcalerts.db"
+PROFILE_DIR = DATA_DIR / ".pw-profile"
+DIAG_DIR = DATA_DIR / ".pw-diag"
 
 TELEGRAM_ENABLED = bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
