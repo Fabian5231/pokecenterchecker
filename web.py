@@ -1,5 +1,6 @@
 """Flask-Weboberflaeche + Start der Hintergrund-Ueberwachung."""
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
@@ -75,6 +76,21 @@ def _checks_page(page: int, per_page: int) -> dict:
         "total": total,
         "total_pages": total_pages,
     }
+
+
+@app.before_request
+def same_origin_only():
+    # Das Login-Cookie (authgate) gilt fuer alle *.fabian-social.dev-Seiten. Aendernde
+    # Anfragen nur von dieser Seite annehmen, sonst koennte eine Nachbarseite z. B.
+    # Telegram-Tests oder Checks ausloesen.
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    site = request.headers.get("Sec-Fetch-Site")
+    origin = request.headers.get("Origin")
+    if (site and site not in ("same-origin", "none")) or (
+            origin and urlsplit(origin).netloc != request.host):
+        return jsonify({"ok": False, "error": "Anfrage von fremder Seite abgelehnt"}), 403
+    return None
 
 
 @app.route("/")
