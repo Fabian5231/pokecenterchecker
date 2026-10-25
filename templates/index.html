@@ -2,457 +2,541 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0e0d" media="(prefers-color-scheme: dark)">
 <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
-<title>PCAlerts – Pokémon Center Monitor</title>
+<title>PCAlerts</title>
 <style>
   :root{
-    --bg:#0f1420; --card:#1a2130; --line:#2a3346; --fg:#e7ecf3; --muted:#94a3b8;
-    --accent:#ffcb05; --blue:#3b82f6; --green:#22c55e; --red:#ef4444; --amber:#f59e0b;
+    color-scheme: light;
+    --plane:#f7f7f5; --surface:#fdfdfc; --text:#0b0b0b; --text-2:#52514e; --muted:#85837d;
+    --border:rgba(11,11,11,.10); --ghost:rgba(11,11,11,.05); --shadow:0 1px 2px rgba(11,11,11,.04);
+    --accent:#2a78d6; --good:#0f7a2f; --good-bg:rgba(15,122,47,.10);
+    --warn:#a86200; --warn-bg:rgba(237,161,0,.14); --bad:#c8322f; --bad-bg:rgba(208,59,59,.10);
+    --alert:#7b3fd1; --alert-bg:rgba(123,63,209,.12); --info:#1f6fb5; --info-bg:rgba(42,120,214,.10);
+    --seg-on:#fdfdfc;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      color-scheme: dark;
+      --plane:#0e0e0d; --surface:#1a1a19; --text:#f0efec; --text-2:#c3c2b7; --muted:#8f8d86;
+      --border:rgba(255,255,255,.10); --ghost:rgba(255,255,255,.07); --shadow:none;
+      --accent:#4a93ea; --good:#3ccf6a; --good-bg:rgba(60,207,106,.13);
+      --warn:#f0b43c; --warn-bg:rgba(240,180,60,.14); --bad:#ef6464; --bad-bg:rgba(239,100,100,.14);
+      --alert:#b98cff; --alert-bg:rgba(185,140,255,.16); --info:#6fb2f5; --info-bg:rgba(111,178,245,.14);
+      --seg-on:#3a3a37;
+    }
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg)}
-  header{background:linear-gradient(90deg,#1e2740,#151b2b);border-bottom:1px solid var(--line);
-    padding:18px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  header h1{font-size:19px;margin:0;font-weight:700}
-  header .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);
-    display:grid;place-items:center;color:#1a2130;font-weight:900}
-  .wrap{max-width:1600px;margin:0 auto;padding:22px 24px 60px}
-  .row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:18px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;flex:1;min-width:210px}
-  .card h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-  .big{font-size:22px;font-weight:700}
-  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:13px;font-weight:600}
-  .dot{width:9px;height:9px;border-radius:50%}
-  .ok{background:rgba(34,197,94,.15);color:var(--green)} .ok .dot{background:var(--green)}
-  .blocked{background:rgba(245,158,11,.15);color:var(--amber)} .blocked .dot{background:var(--amber)}
-  .queue{background:rgba(168,85,247,.18);color:#c084fc} .queue .dot{background:#c084fc}
-  .empty{background:rgba(148,163,184,.15);color:var(--muted)} .empty .dot{background:var(--amber)}
-  .error{background:rgba(239,68,68,.15);color:var(--red)} .error .dot{background:var(--red)}
-  .idle{background:rgba(148,163,184,.15);color:var(--muted)} .idle .dot{background:var(--muted)}
-  .paused{background:rgba(245,158,11,.15);color:var(--amber)} .paused .dot{background:var(--amber)}
-  .maintenance{background:rgba(56,189,248,.15);color:#38bdf8} .maintenance .dot{background:#38bdf8}
-  h2{font-size:15px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
-  tr:last-child td{border-bottom:none}
-  /* Schmale Spalten auf Inhaltsbreite schrumpfen -> die Artikel-Spalte bekommt den Rest,
-     und Preis/Datum/Link brechen nicht mehr um. */
-  .nowrap{width:1%;white-space:nowrap}
-  td.price,th.price{width:1%;white-space:nowrap;text-align:right}
-  .tag{font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap}
-  .in{background:rgba(34,197,94,.16);color:var(--green)}
-  .out{background:rgba(148,163,184,.14);color:var(--muted)}
-  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
-  .muted{color:var(--muted)}
-  button{background:var(--accent);color:#1a2130;border:0;border-radius:9px;padding:9px 16px;
-    font-weight:700;cursor:pointer;font-size:14px}
-  button:disabled{opacity:.5;cursor:wait}
-  .evt-new{color:var(--accent);font-weight:700}
-  .evt-restock{color:var(--green);font-weight:700}
-  .small{font-size:12px}
-  .tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
-  .flex-between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-  code{background:#0b1020;padding:2px 6px;border-radius:5px;font-size:12px}
-  select{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;
-    padding:5px 8px;font-size:13px;margin-left:6px;cursor:pointer}
-  .pager{display:flex;align-items:center;gap:12px}
-  .pgbtn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;
-    padding:7px 12px;font-size:13px;font-weight:600}
-  .pgbtn:disabled{opacity:.4;cursor:not-allowed}
-  .ivl{display:flex;align-items:center;gap:7px;margin-bottom:8px}
-  .ivl input{width:88px;background:#0b1020;color:var(--fg);border:1px solid var(--line);
-    border-radius:8px;padding:6px 8px;font-size:20px;font-weight:700;font-family:inherit}
-  .ivl input:focus{outline:none;border-color:var(--accent)}
-  .ivl .pgbtn{padding:6px 11px;margin-left:auto;cursor:pointer}
-  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-  .chip{background:rgba(148,163,184,.12);color:var(--muted);border:1px solid var(--line);
-    border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer}
-  .chip:hover{color:var(--fg);border-color:var(--accent)}
-  .chip.active{background:rgba(255,203,5,.16);color:var(--accent);border-color:var(--accent)}
-  .actions{display:flex;align-items:center;gap:10px}
-  #pauseBtn{cursor:pointer}
-  #pauseBtn.resume{border-color:var(--green);color:var(--green)}
-  #tgBtn{margin-top:10px;padding:5px 11px;cursor:pointer}
-  #tgBtn.enable{border-color:var(--green);color:var(--green)}
-  #tgBtn[hidden]{display:none}
-  #tgTestBtn{margin-top:10px;margin-left:8px;padding:5px 11px;cursor:pointer}
-  #tgTestBtn[hidden]{display:none}
-  .banner{display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.12);
-    border:1px solid rgba(245,158,11,.45);color:var(--amber);border-radius:12px;
-    padding:12px 16px;margin-bottom:18px;font-size:14px}
-  .banner[hidden]{display:none}
+  [hidden]{display:none !important}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--plane);color:var(--text);
+    font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+  a{color:inherit;text-decoration:none}
+  button{font:inherit;color:inherit}
+
+  /* ---------- Kopf ---------- */
+  .topbar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:4px;max-width:720px;margin:0 auto;
+    padding:calc(14px + env(safe-area-inset-top)) 8px 10px 16px;background:var(--plane)}
+  h1{flex:1;margin:0;font-size:21px;font-weight:650;letter-spacing:-.01em}
+  .icon-button{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;color:var(--text-2);
+    transition:background-color .15s,transform .1s}
+  .icon-button:hover{background:var(--ghost)} .icon-button:active{transform:scale(.92)}
+  #back{margin-left:-10px}
+  main{max-width:720px;margin:0 auto;padding:0 16px calc(40px + env(safe-area-inset-bottom))}
+
+  /* ---------- Status ---------- */
+  .status{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:var(--shadow)}
+  .status-line{display:flex;align-items:center;gap:10px;font-size:19px;font-weight:650;letter-spacing:-.01em}
+  .status-dot{width:12px;height:12px;border-radius:50%;flex:none;background:var(--muted);position:relative}
+  .status-dot::after{content:"";position:absolute;inset:-5px;border-radius:50%;background:inherit;opacity:.25}
+  .st-ok .status-dot{background:var(--good)}
+  .st-queue .status-dot{background:var(--alert)} .st-queue .status-dot::after{animation:pulse 1.4s ease-out infinite}
+  .st-maintenance .status-dot{background:var(--info)}
+  .st-blocked .status-dot,.st-empty .status-dot,.st-paused .status-dot{background:var(--warn)}
+  .st-error .status-dot{background:var(--bad)}
+  @keyframes pulse{from{transform:scale(.6);opacity:.5}to{transform:scale(1.8);opacity:0}}
+  .status-sub{margin:6px 0 0 22px;color:var(--text-2);font-size:14px}
+  .status-note{margin:4px 0 0 22px;color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+  .stats{display:flex;gap:10px;margin:16px 0 0}
+  .stat{flex:1;background:var(--ghost);border-radius:12px;padding:10px 12px}
+  .stat-value{font-size:24px;font-weight:650;line-height:1.15;font-variant-numeric:tabular-nums}
+  .stat-value.good{color:var(--good)}
+  .stat-label{font-size:12.5px;color:var(--text-2)}
+  .primary{display:block;width:100%;margin-top:14px;padding:12px;border:0;border-radius:12px;background:var(--text);
+    color:var(--plane);font-weight:650;cursor:pointer;transition:transform .1s,opacity .15s}
+  .primary:active:not(:disabled){transform:scale(.98)} .primary:disabled{opacity:.45;cursor:default}
+  .banner{display:flex;gap:10px;align-items:center;margin-bottom:12px;padding:12px 14px;border-radius:14px;
+    background:var(--warn-bg);color:var(--warn);font-size:14px}
+  .banner button{margin-left:auto;flex:none;border:0;border-radius:9px;padding:6px 12px;background:var(--warn);
+    color:var(--plane);font-weight:650;cursor:pointer}
+
+  /* ---------- Listen ---------- */
+  .section-head{display:flex;align-items:baseline;justify-content:space-between;margin:26px 2px 10px;
+    font-size:12px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  .section-head a{font-size:13px;letter-spacing:0;text-transform:none;color:var(--accent);font-weight:600}
+  .list{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  .item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-top:1px solid var(--border)}
+  .item:first-child{border-top:0}
+  a.item:active{background:var(--ghost)}
+  .item-main{flex:1;min-width:0}
+  .item-title{font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+  .item-sub{font-size:13px;color:var(--muted);margin-top:2px}
+  .item-side{flex:none;text-align:right}
+  .price{font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .badge{display:inline-block;margin-top:3px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:650;white-space:nowrap}
+  .badge.in{background:var(--good-bg);color:var(--good)}
+  .badge.out{background:var(--ghost);color:var(--muted)}
+  .badge.new{background:var(--alert-bg);color:var(--alert)}
+  .badge.restock{background:var(--good-bg);color:var(--good)}
+  .empty{padding:18px 14px;color:var(--muted);text-align:center;font-size:14px}
+  .more{display:block;width:100%;padding:12px;border:0;border-top:1px solid var(--border);background:none;
+    color:var(--accent);font-weight:600;cursor:pointer}
+
+  /* ---------- Einstellungen ---------- */
+  .setting{margin:6px 0 26px}
+  .setting-head{margin:0 2px 10px;font-size:12px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  .row{display:flex;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid var(--border)}
+  .row:first-child{border-top:0}
+  .row-main{flex:1;min-width:0}
+  .row-title{display:block;font-weight:600}
+  .row-sub{display:block;font-size:13px;color:var(--text-2);margin-top:1px}
+  .row-sub.good{color:var(--good)} .row-sub.bad{color:var(--bad)}
+  .switch{position:relative;flex:none;width:50px;height:30px}
+  .switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+  .switch span{position:absolute;inset:0;border-radius:999px;background:var(--border);transition:background-color .18s;pointer-events:none}
+  .switch span::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s}
+  .switch input:checked+span{background:var(--good)}
+  .switch input:checked+span::after{transform:translateX(20px)}
+  .switch input:disabled{cursor:default} .switch input:disabled+span{opacity:.45}
+  .ghost-btn{flex:none;border:1px solid var(--border);border-radius:10px;background:none;padding:7px 12px;
+    font-size:14px;font-weight:600;cursor:pointer}
+  .ghost-btn:active{background:var(--ghost)}
+  .segmented{display:flex;gap:2px;padding:3px;border-radius:12px;background:var(--ghost)}
+  .segmented button{flex:1;min-width:0;border:0;border-radius:9px;background:none;padding:8px 2px;font-size:13.5px;
+    color:var(--text-2);cursor:pointer;white-space:nowrap;transition:background-color .18s,color .18s}
+  .segmented button[aria-pressed="true"]{background:var(--seg-on);color:var(--text);font-weight:650;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .custom{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;color:var(--text-2)}
+  .custom input{width:96px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);
+    color:var(--text);font:inherit;font-size:16px;font-variant-numeric:tabular-nums}
+  .custom input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .hint{margin:8px 2px 0;font-size:13px;color:var(--muted)}
+  .hint.good{color:var(--good)} .hint.bad{color:var(--bad)}
+  .pager{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-top:1px solid var(--border);
+    font-size:13px;color:var(--muted)}
+  .check-row{padding:9px 14px}
+  .check-row .row-title{font-weight:500;font-variant-numeric:tabular-nums}
+  .check-side{flex:none;display:flex;align-items:center;gap:14px}
+  .check-side .item-sub{margin:0;font-variant-numeric:tabular-nums}
+  .check-status{min-width:118px;display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:13.5px}
+  .check-status .status-dot{width:8px;height:8px} .check-status .status-dot::after{display:none}
+
+  .toast{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:10;max-width:480px;margin:0 auto;
+    padding:11px 14px;border-radius:12px;background:var(--text);color:var(--plane);font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+
+  @keyframes rise-in{from{opacity:0;transform:translateY(8px)}}
+  .view-in{animation:rise-in .3s cubic-bezier(.2,.7,.2,1) both}
+  .toast:not([hidden]){animation:rise-in .25s cubic-bezier(.2,.9,.3,1.15) both}
+  @media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">PC</div>
-  <h1>PCAlerts – Pokémon Center Monitor</h1>
-  <span id="statusPill" class="pill idle" style="margin-left:auto"><span class="dot"></span><span id="statusText">…</span></span>
+<header class="topbar">
+  <a class="icon-button" id="back" href="#" hidden aria-label="Zurück">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </a>
+  <h1 id="title">Pokémon Center</h1>
+  <a class="icon-button" id="settingsLink" href="#einstellungen" aria-label="Einstellungen">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></g></svg>
+  </a>
 </header>
 
-<div class="wrap">
-  <div class="banner" id="pauseBanner" hidden>
-    <span style="font-size:18px">⏸</span>
-    <span><b>Pausiert.</b> Es werden keine Abfragen ausgeführt und der Telegram-Bot
-    schreibt nichts. Bleibt auch nach einem Neustart aktiv.</span>
-  </div>
-
-  <div class="row">
-    <div class="card">
-      <h3>Letzte Prüfung</h3>
-      <div class="big" id="lastCheck">–</div>
-      <div class="small muted" id="lastNote"></div>
+<main>
+  <!-- Start: Status, Artikel, Ereignisse -->
+  <div id="viewStart">
+    <div class="banner" id="pauseBanner" hidden>
+      <span>⏸ <b>Pausiert</b> – keine Abfragen, keine Nachrichten.</span>
+      <button type="button" id="resumeBtn">Fortsetzen</button>
     </div>
-    <div class="card">
-      <h3>Intervall</h3>
-      <div class="ivl">
-        <input id="ivlInput" type="number" min="30" max="86400" step="10"
-               inputmode="numeric" aria-label="Prüfintervall in Sekunden">
-        <span class="small muted">Sek.</span>
-        <button class="pgbtn" id="ivlSave" onclick="saveInterval()">Speichern</button>
+
+    <section class="status st-idle" id="status">
+      <div class="status-line"><span class="status-dot"></span><span id="statusText">Lade …</span></div>
+      <p class="status-sub" id="statusSub"></p>
+      <p class="status-note" id="statusNote" hidden></p>
+      <div class="stats">
+        <div class="stat"><div class="stat-value" id="numTotal">–</div><div class="stat-label">Artikel</div></div>
+        <div class="stat"><div class="stat-value" id="numAvail">–</div><div class="stat-label">verfügbar</div></div>
       </div>
-      <div class="small muted" id="ivlHint">automatisch im Hintergrund</div>
-      <div class="chips" id="ivlChips"></div>
-    </div>
-    <div class="card">
-      <h3>Artikel gesamt / verfügbar</h3>
-      <div class="big"><span id="numTotal">0</span> / <span id="numAvail" style="color:var(--green)">0</span></div>
-      <div class="small muted">in der überwachten Kategorie</div>
-    </div>
-    <div class="card">
-      <h3>Telegram</h3>
-      <div class="big" id="tg">–</div>
-      <div class="small muted" id="notifyOn"></div>
-      <button class="pgbtn" id="tgBtn" onclick="toggleTelegram()" hidden>…</button>
-      <button class="pgbtn" id="tgTestBtn" onclick="sendTelegramTest()" hidden>🧪 Testnachricht senden</button>
-    </div>
+      <button type="button" class="primary" id="checkBtn">Jetzt prüfen</button>
+    </section>
+
+    <h2 class="section-head"><span>Artikel</span><a id="pcurl" href="#" target="_blank" rel="noopener">Shop öffnen ›</a></h2>
+    <div class="list" id="products"><div class="empty">Lade …</div></div>
+
+    <h2 class="section-head"><span>Ereignisse</span></h2>
+    <div class="list" id="events"><div class="empty">Noch keine Ereignisse.</div></div>
   </div>
 
-  <div class="flex-between">
-    <div class="small muted">Überwacht: <a id="pcurl" href="#" target="_blank">Kategorie-Seite</a></div>
-    <div class="actions">
-      <button class="pgbtn" id="pauseBtn" onclick="togglePause()">⏸ Pausieren</button>
-      <button id="checkBtn" onclick="checkNow()">Jetzt prüfen</button>
-    </div>
-  </div>
+  <!-- Einstellungen -->
+  <div id="viewSettings" hidden>
+    <section class="setting">
+      <h2 class="setting-head">Überwachung</h2>
+      <div class="list">
+        <label class="row">
+          <span class="row-main"><span class="row-title">Aktiv</span>
+            <span class="row-sub" id="pauseSub">Prüft die Seite regelmäßig.</span></span>
+          <span class="switch"><input type="checkbox" id="activeSwitch" role="switch" aria-label="Überwachung aktiv"><span></span></span>
+        </label>
+      </div>
+    </section>
 
-  <h2>🛒 Aktuelle Artikel</h2>
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th class="nowrap">Status</th><th>Artikel</th><th class="price">Preis</th>
-        <th class="nowrap">Zuerst gesehen</th><th class="nowrap"></th></tr></thead>
-      <tbody id="products"><tr><td colspan="5" class="muted">Lade…</td></tr></tbody>
-    </table>
-  </div>
+    <section class="setting">
+      <h2 class="setting-head">Prüfintervall</h2>
+      <div class="segmented" id="ivlPresets" role="group" aria-label="Prüfintervall"></div>
+      <div class="custom">
+        <span>Eigener Wert</span>
+        <input id="ivlInput" type="number" min="30" max="86400" step="10" inputmode="numeric" aria-label="Prüfintervall in Sekunden">
+        <span>Sek.</span>
+        <button type="button" class="ghost-btn" id="ivlSave">Speichern</button>
+      </div>
+      <p class="hint" id="ivlHint"></p>
+    </section>
 
-  <h2>🔔 Erkannte Ereignisse</h2>
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th class="nowrap">Zeit</th><th class="nowrap">Ereignis</th><th>Artikel</th>
-        <th class="price">Preis</th></tr></thead>
-      <tbody id="events"><tr><td colspan="4" class="muted">Noch keine Ereignisse.</td></tr></tbody>
-    </table>
-  </div>
+    <section class="setting">
+      <h2 class="setting-head">Telegram</h2>
+      <div class="list">
+        <label class="row">
+          <span class="row-main"><span class="row-title">Bot schickt Meldungen</span>
+            <span class="row-sub" id="tgSub">–</span></span>
+          <span class="switch"><input type="checkbox" id="tgSwitch" role="switch" aria-label="Telegram-Bot an"><span></span></span>
+        </label>
+        <div class="row" id="tgTestRow">
+          <span class="row-main"><span class="row-title">Testnachricht</span>
+            <span class="row-sub">Kommt auch bei Pause oder abgeschaltetem Bot an.</span></span>
+          <button type="button" class="ghost-btn" id="tgTestBtn">Senden</button>
+        </div>
+      </div>
+    </section>
 
-  <div class="flex-between" style="margin:26px 0 12px">
-    <h2 style="margin:0">🕑 Prüf-Historie</h2>
-    <label class="small muted">Pro Seite
-      <select id="perPage">
-        <option value="20">20</option>
-        <option value="30">30</option>
-        <option value="50">50</option>
-      </select>
-    </label>
+    <section class="setting">
+      <h2 class="setting-head">Prüfverlauf</h2>
+      <div class="list">
+        <div id="checks"><div class="empty">Lade …</div></div>
+        <div class="pager">
+          <button type="button" class="ghost-btn" id="prevPage">‹</button>
+          <span id="pageLabel">–</span>
+          <button type="button" class="ghost-btn" id="nextPage">›</button>
+        </div>
+      </div>
+    </section>
   </div>
-  <div class="tablewrap">
-    <table>
-      <thead><tr><th class="nowrap">Zeit</th><th class="nowrap">Ergebnis</th>
-        <th class="nowrap">Artikel</th><th>Hinweis</th></tr></thead>
-      <tbody id="checks"><tr><td colspan="4" class="muted">Lade…</td></tr></tbody>
-    </table>
-  </div>
-  <div class="flex-between" style="margin-top:12px">
-    <div class="small muted" id="checksInfo"></div>
-    <div class="pager">
-      <button class="pgbtn" id="prevPage" onclick="changePage(-1)">‹ Zurück</button>
-      <span class="small muted" id="pageLabel">–</span>
-      <button class="pgbtn" id="nextPage" onclick="changePage(1)">Weiter ›</button>
-    </div>
-  </div>
-  <p class="small muted" style="margin-top:24px">Aktualisiert sich automatisch alle 15 Sekunden.</p>
-</div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
 <script>
-const STATUS_LABEL = {ok:"Läuft – zuletzt OK", queue:"🚨 Warteschlange/Captcha – Drop?!", maintenance:"🛠 Wartungsarbeiten – kein Drop", blocked:"Bot-Schutz blockiert", empty:"Seite leer / geändert", error:"Fehler", gestartet:"Startet…", paused:"⏸ Pausiert – keine Abfragen, kein Telegram", idle:"Bereit"};
-function statusClass(s){ return ({ok:"ok",queue:"queue",maintenance:"maintenance",blocked:"blocked",empty:"empty",error:"error",paused:"paused"})[s] || "idle"; }
+'use strict';
+const $ = (id) => document.getElementById(id);
 
-function esc(s){ return (s??"").toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const STATUS = {
+  ok: 'Läuft', queue: '🚨 Warteschlange – Drop?!', maintenance: 'Wartungsarbeiten',
+  blocked: 'Bot-Schutz blockiert', empty: 'Seite leer oder geändert', error: 'Fehler',
+  gestartet: 'Startet …', paused: 'Pausiert', idle: 'Bereit',
+};
+const CHECK_LABEL = {
+  ok: 'OK', queue: 'Warteschlange', maintenance: 'Wartung', blocked: 'Blockiert',
+  empty: 'Leer', error: 'Fehler', paused: 'Pausiert',
+};
+const IVL_PRESETS = [[60, '1 Min.'], [300, '5 Min.'], [900, '15 Min.'], [3600, '1 Std.']];
+const EVENTS_SHOWN = 8;
+let state = null;
+let showAllEvents = false;
+let checksPage = 1;
+let checksPages = 1;
 
-/* ---- Prüfintervall ---- */
-const IVL_PRESETS = [[60,'1 min'],[90,'1,5 min'],[300,'5 min'],[900,'15 min'],[3600,'1 Std.']];
-let ivlCurrent = null;
-let ivlTouched = false;   // Nutzer tippt gerade -> Feld nicht überschreiben
-let ivlHintUntil = 0;     // solange steht eine Rückmeldung im Hinweis-Text
-
-function humanInterval(sec){
-  if (sec < 60) return 'alle ' + sec + ' Sekunden';
-  if (sec < 3600) return 'alle ' + Math.round(sec/60) + ' Minuten';
-  const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
-  return 'alle ' + h + ' Std.' + (m ? ' ' + m + ' Min.' : '');
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text != null) node.textContent = text;
+  return node;
 }
 
-function updateInterval(s){
-  ivlCurrent = s.interval;
-  const input = document.getElementById('ivlInput');
-  input.min = s.interval_min; input.max = s.interval_max;
-  if (!ivlTouched && document.activeElement !== input) input.value = s.interval;
-  if (Date.now() > ivlHintUntil){
-    const hint = document.getElementById('ivlHint');
-    hint.textContent = humanInterval(s.interval);
-    hint.style.color = '';
-  }
-  document.getElementById('ivlChips').innerHTML = IVL_PRESETS.map(([sec,label]) =>
-    `<button class="chip${sec===ivlCurrent?' active':''}" onclick="applyInterval(${sec})">${label}</button>`
-  ).join('');
+let toastTimer;
+function toast(text) {
+  const box = $('toast');
+  box.textContent = text;
+  box.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { box.hidden = true; }, 3500);
 }
 
-function applyInterval(sec){
-  document.getElementById('ivlInput').value = sec;
-  saveInterval();
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+  });
+  let data = {};
+  try { data = await res.json(); } catch { /* keep the HTTP status */ }
+  if (!res.ok || data.ok === false) throw new Error(data.error || data.note || `HTTP ${res.status}`);
+  return data;
 }
 
-async function saveInterval(){
-  const input = document.getElementById('ivlInput');
-  const btn = document.getElementById('ivlSave');
-  const hint = document.getElementById('ivlHint');
-  const seconds = parseInt(input.value, 10);
-  btn.disabled = true;
-  try {
-    const r = await fetch('/api/interval', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({seconds})
-    });
-    const d = await r.json();
-    if (d.ok){
-      ivlCurrent = d.interval;
-      input.value = d.interval;
-      ivlTouched = false;
-      hint.textContent = 'Gespeichert ✓ – gilt ab sofort (' + humanInterval(d.interval) + ')';
-      hint.style.color = 'var(--green)';
-    } else {
-      hint.textContent = d.error || 'Konnte nicht gespeichert werden.';
-      hint.style.color = 'var(--red)';
-    }
-  } catch(e){
-    hint.textContent = 'Server nicht erreichbar.';
-    hint.style.color = 'var(--red)';
-  }
-  ivlHintUntil = Date.now() + 5000;
-  btn.disabled = false;
-  refresh();
-}
+// "Pokémon-Sammelkartenspiel: Mini-Tin-Box … (DE)" -> "Mini-Tin-Box …"
+const shortName = (name) => (name || '').replace(/^Pokémon-Sammelkartenspiel:\s*/i, '').replace(/\s*\(DE\)\s*$/, '');
 
-document.getElementById('ivlInput').addEventListener('input', ()=>{ ivlTouched = true; });
-document.getElementById('ivlInput').addEventListener('keydown', e=>{
-  if (e.key === 'Enter'){ e.preventDefault(); saveInterval(); }
+function ago(iso) {
+  if (!iso) return null;
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return 'gerade eben';
+  if (s < 3600) return `vor ${Math.round(s / 60)} Min.`;
+  if (s < 86400) return `vor ${Math.round(s / 3600)} Std.`;
+  const d = Math.round(s / 86400);
+  return d === 1 ? 'gestern' : `vor ${d} Tagen`;
+}
+const fmtDate = (iso) => new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric', year: '2-digit' });
+const fmtDateTime = (iso) => new Date(iso).toLocaleString('de-DE', {
+  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
 });
 
-/* ---- Pause (stoppt Abfragen UND Telegram) ---- */
-let isPaused = false;
-
-function updatePause(s){
-  isPaused = !!s.paused;
-  const btn = document.getElementById('pauseBtn');
-  btn.textContent = isPaused ? '▶ Fortsetzen' : '⏸ Pausieren';
-  btn.classList.toggle('resume', isPaused);
-  document.getElementById('pauseBanner').hidden = !isPaused;
-  document.getElementById('checkBtn').disabled = isPaused;
+function every(sec) {
+  if (sec < 60) return `alle ${sec} Sek.`;
+  if (sec < 3600) return `alle ${Math.round(sec / 60)} Min.`;
+  const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+  return h === 1 && !m ? 'stündlich' : `alle ${h} Std.${m ? ` ${m} Min.` : ''}`;
 }
 
-async function togglePause(){
-  const btn = document.getElementById('pauseBtn');
-  btn.disabled = true;
+/* ---------- Start ---------- */
+
+function renderStatus(s) {
+  // Right after a restart the monitor says "gestartet" until its next run: show the last result instead.
+  const key = s.paused ? 'paused'
+    : (['gestartet', 'idle'].includes(s.status) && s.last_check_status) ? s.last_check_status : s.status;
+  $('status').className = `status st-${STATUS[key] ? key : 'idle'}`;
+  $('statusText').textContent = STATUS[key] || key;
+  $('statusSub').textContent = s.paused ? 'Keine Abfragen, bis du fortsetzt.'
+    : [s.last_check_iso ? `Geprüft ${ago(s.last_check_iso)}` : 'Noch nicht geprüft', every(s.interval)].join(' · ');
+  const note = s.last_check_note || s.last_error || '';
+  $('statusNote').textContent = note;
+  $('statusNote').hidden = !note;
+  const avail = s.products.filter((p) => p.available).length;
+  $('numTotal').textContent = s.products.length;
+  $('numAvail').textContent = avail;
+  $('numAvail').classList.toggle('good', avail > 0);
+  $('checkBtn').disabled = s.paused;
+  $('pauseBanner').hidden = !s.paused;
+  $('pcurl').href = s.url;
+}
+
+function renderProducts(products) {
+  const host = $('products');
+  if (!products.length) { host.replaceChildren(el('div', 'empty', 'Noch keine Artikel erfasst.')); return; }
+  const sorted = [...products].sort((a, b) => (b.available - a.available) || shortName(a.name).localeCompare(shortName(b.name), 'de'));
+  host.replaceChildren(...sorted.map((p) => {
+    const item = el('a', 'item');
+    item.href = p.url;
+    item.target = '_blank';
+    item.rel = 'noopener';
+    const main = el('div', 'item-main');
+    main.append(el('div', 'item-title', shortName(p.name)), el('div', 'item-sub', `seit ${fmtDate(p.first_seen)}`));
+    const side = el('div', 'item-side');
+    side.append(el('div', 'price', p.price || '–'), el('span', `badge ${p.available ? 'in' : 'out'}`, p.available ? 'Verfügbar' : 'Ausverkauft'));
+    item.append(main, side);
+    return item;
+  }));
+}
+
+function renderEvents(events) {
+  const host = $('events');
+  if (!events.length) { host.replaceChildren(el('div', 'empty', 'Noch keine Ereignisse.')); return; }
+  const shown = showAllEvents ? events : events.slice(0, EVENTS_SHOWN);
+  const items = shown.map((e) => {
+    const item = el('a', 'item');
+    item.href = e.url;
+    item.target = '_blank';
+    item.rel = 'noopener';
+    const main = el('div', 'item-main');
+    main.append(el('div', 'item-title', shortName(e.name)), el('div', 'item-sub', fmtDateTime(e.ts)));
+    const side = el('div', 'item-side');
+    side.append(el('div', 'price', e.price || '–'),
+      el('span', `badge ${e.type === 'new' ? 'new' : 'restock'}`, e.type === 'new' ? 'Neu' : 'Wieder da'));
+    item.append(main, side);
+    return item;
+  });
+  if (events.length > EVENTS_SHOWN) {
+    const more = el('button', 'more', showAllEvents ? 'Weniger anzeigen' : `Alle ${events.length} anzeigen`);
+    more.type = 'button';
+    more.addEventListener('click', () => { showAllEvents = !showAllEvents; renderEvents(events); });
+    items.push(more);
+  }
+  host.replaceChildren(...items);
+}
+
+/* ---------- Einstellungen ---------- */
+
+let ivlTyping = false;
+
+function renderSettings(s) {
+  const active = $('activeSwitch');
+  active.checked = !s.paused;
+  $('pauseSub').textContent = s.paused ? 'Pausiert – keine Abfragen, keine Nachrichten.' : `Prüft die Seite ${every(s.interval)}.`;
+
+  $('ivlPresets').replaceChildren(...IVL_PRESETS.map(([sec, label]) => {
+    const b = el('button', null, label);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(sec === s.interval));
+    b.addEventListener('click', () => saveInterval(sec));
+    return b;
+  }));
+  const input = $('ivlInput');
+  input.min = s.interval_min;
+  input.max = s.interval_max;
+  if (!ivlTyping && document.activeElement !== input) input.value = s.interval;
+
+  const tg = $('tgSwitch');
+  const sub = $('tgSub');
+  $('tgTestRow').hidden = !s.telegram;
+  tg.disabled = !s.telegram;
+  tg.checked = s.telegram && s.telegram_on;
+  sub.className = 'row-sub';
+  if (!s.telegram) sub.textContent = 'Nicht eingerichtet (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID in .env).';
+  else if (!s.telegram_on) sub.textContent = 'Aus – Prüfungen laufen weiter, es wird nur nichts gesendet.';
+  else if (s.paused) sub.textContent = 'An, aber die Pause hält auch den Bot an.';
+  else sub.textContent = 'An – bei neuen Artikeln und wenn etwas wieder da ist.';
+}
+
+async function saveInterval(seconds) {
+  const hint = $('ivlHint');
   try {
-    await fetch('/api/pause', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({paused: !isPaused})
-    });
-  } catch(e){}
-  btn.disabled = false;
-  await Promise.all([refresh(), refreshChecks()]);
-}
-
-/* ---- Telegram-Bot (unabhängig von der Pause an/aus) ---- */
-let tgOn = true;
-
-function updateTelegram(s){
-  tgOn = !!s.telegram_on;
-  const el = document.getElementById('tg');
-  const note = document.getElementById('notifyOn');
-  const btn = document.getElementById('tgBtn');
-  const testBtn = document.getElementById('tgTestBtn');
-
-  if (!s.telegram){                       // kein Token/Chat-ID in der .env
-    el.textContent = 'nicht konfiguriert';
-    el.style.color = 'var(--muted)';
-    note.textContent = 'TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID in .env setzen';
-    btn.hidden = true;
-    testBtn.hidden = true;
-    return;
+    const d = await post('/api/interval', { seconds });
+    ivlTyping = false;
+    hint.className = 'hint good';
+    hint.textContent = `Gespeichert – prüft jetzt ${every(d.interval)}.`;
+  } catch (err) {
+    hint.className = 'hint bad';
+    hint.textContent = err.message;
   }
-
-  testBtn.hidden = false;
-  btn.hidden = false;
-  btn.textContent = tgOn ? '🔕 Bot abschalten' : '🔔 Bot einschalten';
-  btn.classList.toggle('enable', !tgOn);   // grün, wenn er wieder an soll
-  if (!tgOn){
-    el.textContent = 'abgeschaltet';
-    el.style.color = 'var(--amber)';
-    note.textContent = 'Prüfungen laufen weiter – es wird nur nichts gesendet.';
-  } else if (s.paused){
-    el.textContent = 'an (pausiert)';
-    el.style.color = 'var(--muted)';
-    note.textContent = 'Pause stoppt auch den Bot – erst fortsetzen.';
-  } else {
-    el.textContent = 'aktiv ✓';
-    el.style.color = 'var(--green)';
-    note.textContent = 'bei: ' + (s.notify_on||[]).join(', ');
-  }
-}
-
-async function toggleTelegram(){
-  const btn = document.getElementById('tgBtn');
-  const note = document.getElementById('notifyOn');
-  btn.disabled = true;
-  try {
-    const r = await fetch('/api/telegram', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({enabled: !tgOn})
-    });
-    const d = await r.json();
-    if (!d.ok){ note.textContent = d.error || 'Konnte nicht umgestellt werden.'; }
-  } catch(e){
-    note.textContent = 'Server nicht erreichbar.';
-  }
-  btn.disabled = false;
   await refresh();
 }
 
-async function sendTelegramTest(){
-  const btn = document.getElementById('tgTestBtn');
-  const note = document.getElementById('notifyOn');
-  const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = '… wird gesendet';
+async function renderChecks() {
+  let d;
+  try { d = await (await fetch(`/api/checks?page=${checksPage}&per_page=20`)).json(); } catch { return; }
+  checksPage = d.page;
+  checksPages = d.total_pages;
+  const host = $('checks');
+  host.replaceChildren(...(d.checks.length ? d.checks.map((c) => {
+    const row = el('div', 'row');
+    const main = el('div', 'row-main');
+    main.append(el('div', 'row-title', fmtDateTime(c.ts)));
+    if (c.note) main.append(el('div', 'row-sub', c.note));
+    const status = el('span', `check-status st-${c.status}`);
+    status.append(el('span', 'status-dot'), el('span', null, CHECK_LABEL[c.status] || c.status));
+    const count = el('span', 'item-sub', `${c.num_available}/${c.num_products}`);
+    count.title = 'verfügbar / Artikel';
+    const side = el('div', 'check-side');
+    side.append(count, status);
+    row.append(main, side);
+    row.classList.add('check-row');
+    return row;
+  }) : [el('div', 'empty', 'Noch keine Prüfungen.')]));
+  $('pageLabel').textContent = d.total ? `Seite ${d.page} von ${d.total_pages} · ${d.total} Läufe` : '–';
+  $('prevPage').disabled = d.page <= 1;
+  $('nextPage').disabled = d.page >= d.total_pages;
+}
+
+/* ---------- Laden, Ansicht ---------- */
+
+async function refresh() {
+  let s;
+  try { s = await (await fetch('/api/state')).json(); } catch { return; }
+  state = s;
+  renderStatus(s);
+  renderProducts(s.products);
+  renderEvents(s.events);
+  renderSettings(s);
+}
+
+const settingsOpen = () => location.hash === '#einstellungen';
+let fromStart = false;
+
+function showView() {
+  const open = settingsOpen();
+  $('viewStart').hidden = open;
+  $('viewSettings').hidden = !open;
+  $('back').hidden = !open;
+  $('settingsLink').hidden = open;
+  $('title').textContent = open ? 'Einstellungen' : 'Pokémon Center';
+  const view = open ? $('viewSettings') : $('viewStart');
+  view.classList.remove('view-in');
+  void view.offsetWidth;
+  view.classList.add('view-in');
+  window.scrollTo(0, 0);
+  if (open) renderChecks();
+}
+
+async function setPaused(paused) {
   try {
-    const r = await fetch('/api/telegram-test', { method:'POST' });
-    const d = await r.json();
-    note.textContent = d.ok ? '✅ Testnachricht gesendet – Telegram prüfen.' : (d.error || 'Senden fehlgeschlagen.');
-  } catch(e){
-    note.textContent = 'Server nicht erreichbar.';
+    await post('/api/pause', { paused });
+    toast(paused ? 'Pausiert.' : 'Läuft wieder.');
+  } catch (err) {
+    toast(err.message);
+  }
+  await refresh();
+}
+
+$('checkBtn').addEventListener('click', async () => {
+  const btn = $('checkBtn');
+  btn.disabled = true;
+  btn.textContent = 'Prüfe …';
+  try {
+    const d = await post('/api/check-now');
+    toast(d.status === 'ok' ? 'Geprüft – alles aktuell.' : `Ergebnis: ${STATUS[d.status] || d.status}`);
+  } catch (err) {
+    toast(err.message);
+  }
+  btn.textContent = 'Jetzt prüfen';
+  await refresh();
+});
+$('resumeBtn').addEventListener('click', () => setPaused(false));
+$('activeSwitch').addEventListener('change', (e) => setPaused(!e.target.checked));
+$('tgSwitch').addEventListener('change', async (e) => {
+  try {
+    await post('/api/telegram', { enabled: e.target.checked });
+    toast(e.target.checked ? 'Telegram-Bot ist an.' : 'Telegram-Bot ist aus.');
+  } catch (err) {
+    e.target.checked = !e.target.checked;
+    toast(err.message);
+  }
+  await refresh();
+});
+$('tgTestBtn').addEventListener('click', async () => {
+  const btn = $('tgTestBtn');
+  btn.disabled = true;
+  try {
+    await post('/api/telegram-test');
+    toast('Testnachricht gesendet – Telegram prüfen.');
+  } catch (err) {
+    toast(err.message);
   }
   btn.disabled = false;
-  btn.textContent = original;
-}
-
-async function refresh(){
-  let s;
-  try { s = await (await fetch('/api/state')).json(); } catch(e){ return; }
-  updatePause(s);
-  updateTelegram(s);
-
-  const pill = document.getElementById('statusPill');
-  pill.className = 'pill ' + statusClass(s.status);
-  document.getElementById('statusText').textContent = STATUS_LABEL[s.status] || s.status;
-
-  document.getElementById('lastCheck').textContent = s.last_check || '–';
-  document.getElementById('lastNote').textContent = s.last_check_note || (s.last_error || '');
-  updateInterval(s);
-  document.getElementById('pcurl').href = s.url;
-
-  const avail = s.products.filter(p=>p.available).length;
-  document.getElementById('numTotal').textContent = s.products.length;
-  document.getElementById('numAvail').textContent = avail;
-
-  document.getElementById('products').innerHTML = s.products.length ? s.products.map(p=>`
-    <tr>
-      <td class="nowrap"><span class="tag ${p.available?'in':'out'}">${p.available?'VERFÜGBAR':'ausverkauft'}</span></td>
-      <td>${esc(p.name)}<div class="small muted">${esc(p.id)}</div></td>
-      <td class="price">${esc(p.price||'–')}</td>
-      <td class="small muted nowrap">${esc(p.first_seen_fmt)}</td>
-      <td class="nowrap"><a href="${esc(p.url)}" target="_blank">öffnen ›</a></td>
-    </tr>`).join('') : '<tr><td colspan="5" class="muted">Noch keine Daten.</td></tr>';
-
-  document.getElementById('events').innerHTML = s.events.length ? s.events.map(e=>`
-    <tr>
-      <td class="small muted nowrap">${esc(e.ts_fmt)}</td>
-      <td class="nowrap ${e.type==='new'?'evt-new':'evt-restock'}">${e.type==='new'?'🆕 Neu gelistet':'✅ Wieder verfügbar'}</td>
-      <td>${esc(e.name)}<div class="small muted">${esc(e.product_id)}</div></td>
-      <td class="price">${esc(e.price||'–')}</td>
-    </tr>`).join('') : '<tr><td colspan="4" class="muted">Noch keine Ereignisse.</td></tr>';
-}
-
-let checksPage = 1;
-let checksPerPage = 20;
-let checksTotalPages = 1;
-
-async function refreshChecks(){
-  let d;
-  try {
-    d = await (await fetch(`/api/checks?page=${checksPage}&per_page=${checksPerPage}`)).json();
-  } catch(e){ return; }
-
-  checksPage = d.page;
-  checksPerPage = d.per_page;
-  checksTotalPages = d.total_pages;
-
-  document.getElementById('checks').innerHTML = d.checks.length ? d.checks.map(c=>`
-    <tr>
-      <td class="small muted nowrap">${esc(c.ts_fmt)}</td>
-      <td class="nowrap"><span class="pill ${statusClass(c.status)}" style="font-size:11px;padding:2px 8px"><span class="dot"></span>${esc(c.status)}</span></td>
-      <td class="small nowrap">${c.num_products} (${c.num_available} verf.)</td>
-      <td class="small muted">${esc(c.note||'')}</td>
-    </tr>`).join('') : '<tr><td colspan="4" class="muted">Noch keine Prüfungen.</td></tr>';
-
-  const from = d.total ? (d.page-1)*d.per_page + 1 : 0;
-  const to = Math.min(d.page*d.per_page, d.total);
-  document.getElementById('checksInfo').textContent =
-    d.total ? `${from}–${to} von ${d.total} Läufen` : 'Noch keine Läufe';
-  document.getElementById('pageLabel').textContent = `Seite ${d.page} / ${d.total_pages}`;
-  document.getElementById('prevPage').disabled = d.page <= 1;
-  document.getElementById('nextPage').disabled = d.page >= d.total_pages;
-}
-
-function changePage(delta){
-  const next = checksPage + delta;
-  if (next < 1 || next > checksTotalPages) return;
-  checksPage = next;
-  refreshChecks();
-}
-
-document.getElementById('perPage').addEventListener('change', e=>{
-  checksPerPage = parseInt(e.target.value, 10);
-  checksPage = 1;
-  refreshChecks();
 });
+$('ivlInput').addEventListener('input', () => { ivlTyping = true; });
+$('ivlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('ivlSave').click(); } });
+$('ivlSave').addEventListener('click', () => saveInterval(parseInt($('ivlInput').value, 10)));
+$('prevPage').addEventListener('click', () => { if (checksPage > 1) { checksPage--; renderChecks(); } });
+$('nextPage').addEventListener('click', () => { if (checksPage < checksPages) { checksPage++; renderChecks(); } });
+window.addEventListener('hashchange', () => { fromStart = settingsOpen(); showView(); });
+$('back').addEventListener('click', (e) => { if (fromStart) { e.preventDefault(); history.back(); } });
 
-async function checkNow(){
-  const btn = document.getElementById('checkBtn');
-  btn.disabled = true; btn.textContent = 'Prüfe…';
-  try { await fetch('/api/check-now', {method:'POST'}); } catch(e){}
-  btn.textContent = 'Jetzt prüfen';
-  await Promise.all([refresh(), refreshChecks()]);
-  btn.disabled = isPaused;   // bleibt gesperrt, falls zwischenzeitlich pausiert
-}
-
+showView();
 refresh();
-refreshChecks();
-setInterval(()=>{ refresh(); refreshChecks(); }, 15000);
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  refresh();
+  if (settingsOpen() && checksPage === 1) renderChecks();
+}, 15000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
 </script>
 </body>
 </html>

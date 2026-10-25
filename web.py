@@ -41,6 +41,7 @@ def _state() -> dict:
         "telegram_on": db.telegram_on(),
         "notify_on": sorted(config.NOTIFY_ON),
         "last_check": _fmt(last["ts"]) if last else None,
+        "last_check_iso": last["ts"] if last else None,
         "last_check_status": last["status"] if last else None,
         "last_check_note": last["note"] if last else "",
         "products": [
